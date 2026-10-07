@@ -76,6 +76,20 @@
   .ctlbox{display:flex; align-items:center; gap:8px; flex:1 1 180px; min-width:140px}
   .ctlbox label{font-size:13px;color:var(--dim);white-space:nowrap}
   #audioBox{display:none}
+  #ytbox{
+    position:fixed; right:10px; bottom:76px; z-index:30; width:200px;
+    border:1px solid var(--line); border-radius:10px; overflow:hidden;
+    background:#000; display:none; box-shadow:0 6px 24px rgba(0,0,0,.4);
+  }
+  body.hasyt #ytbox{display:block}
+  body.hasyt.ytmin #ytbox{width:0; height:0; border:none}
+  #ytbox iframe{display:block; width:100%; height:112px; border:0}
+  #ytHide{
+    position:absolute; top:2px; right:2px; z-index:2; background:rgba(0,0,0,.65);
+    color:#fff; border-radius:6px; padding:3px 7px; font-size:12px; line-height:1;
+  }
+  #btnYt{display:none}
+  body.hasyt #btnYt{display:inline-flex}
   body.hasaudio #audioBox{display:flex}
   body.hasaudio #speedBox{display:none}
 
@@ -147,6 +161,7 @@
     <input type="range" id="seekbar" min="0" max="1000" value="0">
     <span class="clock" id="dur">0:00</span>
   </div>
+  <button class="btn" id="btnYt" title="Mostrar/ocultar el video">▣</button>
   <button class="btn" id="btnZen" title="Pantalla completa">⛶</button>
   <button class="btn" id="btnNextSong">⏭</button>
 </footer>
@@ -198,6 +213,10 @@
       <button class="btn" id="btnDropAudio">Quitar audio</button>
     </div>
     <p class="hint" id="audioInfo">Sin audio.</p>
+    <input type="text" id="edYt" placeholder="…o pegá un link de YouTube (el karaoke, por ejemplo)" autocomplete="off">
+    <p class="hint">El video se reproduce desde YouTube y el karaoke sigue su tiempo, así que
+    podés sincronizar contra él. Necesita internet: si no hay, el tema igual anda con el
+    cronómetro interno.</p>
     <hr>
     <div class="row">
       <button class="btn" id="btnDup">Duplicar</button>
@@ -272,6 +291,7 @@
 <input type="file" id="fileIn" accept=".json,.lrc,.txt,application/json,text/plain" style="display:none" multiple>
 <input type="file" id="audioIn" accept="audio/*" style="display:none">
 <audio id="player" preload="auto"></audio>
+<div id="ytbox"><button id="ytHide">ocultar</button><div id="ytplayer"></div></div>
 
 <script>
 (function(){
@@ -297,7 +317,7 @@ function load(k){ try{ return JSON.parse(localStorage.getItem(k)||'null'); }catc
 function migrate(d){
   if(!d) { const old=load('atril.data.v1'); if(old) d=old; else return null; }
   d.version=2; d.updatedAt=d.updatedAt||0;
-  d.songs=(d.songs||[]).map(s=>Object.assign({audioName:null, updatedAt:0, deleted:false}, s));
+  d.songs=(d.songs||[]).map(s=>Object.assign({audioName:null, yt:null, updatedAt:0, deleted:false}, s));
   return d;
 }
 function saveData(touch){
@@ -376,6 +396,7 @@ function toLrc(song){
 /* ============ render ============ */
 const stage=$('#stage'), lyrics=$('#lyrics'), empty=$('#empty'), player=$('#player');
 let lineEls=[], active=-1, audioURL=null;
+let yt=null, ytListo=false, ytId=null;
 
 function render(){
   $('#hTitle').textContent = cur ? cur.title : 'Sin temas';
@@ -393,7 +414,8 @@ function render(){
   loadAudio();
 }
 function isKaraoke(){ return !!(cur && cur.timings && cur.timings.length); }
-function hasAudio(){ return !!audioURL; }
+function hasAudio(){ return !!audioURL || hayYt(); }
+function esYt(){ return !audioURL && hayYt(); }
 function highlight(i){
   if(i===active) return;
   if(lineEls[active]) lineEls[active].classList.remove('cur');
@@ -406,12 +428,63 @@ function highlight(i){
   }
 }
 
+/* ============ YouTube ============ */
+function idDeYoutube(url){
+  if(!url) return null;
+  const u=url.trim();
+  if(/^[\w-]{11}$/.test(u)) return u;
+  let m = u.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|live\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+  return m ? m[1] : null;
+}
+function cargarApiYt(){
+  return new Promise(res=>{
+    if(window.YT && YT.Player) return res(true);
+    const previo = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = ()=>{ if(previo) try{previo();}catch(e){} res(true); };
+    const t=document.createElement('script');
+    t.src='https://www.youtube.com/iframe_api';
+    t.onerror=()=>res(false);
+    document.head.appendChild(t);
+    setTimeout(()=>res(!!(window.YT && YT.Player)), 8000);  // sin internet, seguimos sin video
+  });
+}
+async function montarYt(id){
+  if(!await cargarApiYt()){ gStat('Sin conexión: el video no carga, va el cronómetro interno.'); return false; }
+  ytListo=false;
+  if(yt && yt.loadVideoById){ ytId=id; yt.cueVideoById(id); ytListo=true; return true; }
+  return new Promise(res=>{
+    yt = new YT.Player('ytplayer', {
+      videoId:id, host:'https://www.youtube-nocookie.com',
+      playerVars:{controls:1, rel:0, playsinline:1, modestbranding:1, iv_load_policy:3},
+      events:{
+        onReady:()=>{ ytListo=true; ytId=id; $('#dur').textContent=fmt(yt.getDuration()||0); res(true); },
+        onError:()=>{ ytListo=false; gStat('YouTube no pudo abrir ese video.','err'); res(false); },
+        onStateChange:e=>{
+          if(e.data===YT.PlayerState.ENDED) setPlaying(false);
+          // si lo pausan desde el control del video, que la app se entere
+          else if(e.data===YT.PlayerState.PAUSED && playing) setPlaying(false);
+          else if(e.data===YT.PlayerState.PLAYING && !playing) setPlaying(true);
+        }
+      }
+    });
+  });
+}
+function hayYt(){ return !!(ytListo && yt && typeof yt.getCurrentTime==='function'); }
+
 /* ============ audio ============ */
 async function loadAudio(){
   setPlaying(false);
   if(audioURL){ URL.revokeObjectURL(audioURL); audioURL=null; }
   player.removeAttribute('src'); player.load();
-  document.body.classList.remove('hasaudio');
+  document.body.classList.remove('hasaudio','hasyt');
+  if(hayYt() && yt.stopVideo){ try{ yt.stopVideo(); }catch(e){} }
+  ytListo=false;
+
+  // el archivo local manda; si no hay, probamos con YouTube
+  if(cur && !cur.audioName && cur.yt){
+    if(await montarYt(cur.yt)) document.body.classList.add('hasyt','hasaudio');
+    return;
+  }
   if(cur && cur.audioName){
     let blob = await idbGet(cur.id).catch(()=>null);
     if(!blob && gcfg.token && gcfg.audio){ blob = await gPullAudio(cur).catch(()=>null); }
@@ -423,17 +496,20 @@ async function loadAudio(){
 }
 player.addEventListener('loadedmetadata',()=>{ $('#dur').textContent=fmt(player.duration||0); });
 player.addEventListener('timeupdate',()=>{
-  if(!hasAudio()) return;
-  if(player.duration) $('#seekbar').value = Math.round(player.currentTime/player.duration*1000);
+  if(player.duration && audioURL) $('#seekbar').value = Math.round(player.currentTime/player.duration*1000);
 });
 player.addEventListener('ended',()=>setPlaying(false));
-$('#seekbar').oninput=e=>{ if(player.duration) seek(e.target.value/1000*player.duration); };
+$('#seekbar').oninput=e=>{
+  const d = esYt() ? (yt.getDuration()||0) : player.duration;
+  if(d) seek(e.target.value/1000*d);
+};
 
 /* ============ reproducción ============ */
 let playing=false, clock=0, rafId=null, lastTs=0, scrollAcc=0;
 function setPlaying(v){
   playing=v; $('#btnPlay').textContent = v?'⏸':'▶'; $('#btnPlay').classList.toggle('on',v);
-  if(hasAudio()){ if(v) player.play().catch(()=>{}); else player.pause(); }
+  if(esYt()){ try{ v ? yt.playVideo() : yt.pauseVideo(); }catch(e){} }
+  else if(audioURL){ if(v) player.play().catch(()=>{}); else player.pause(); }
   if(v){ lastTs=performance.now(); scrollAcc=0; if(!rafId) rafId=requestAnimationFrame(tick); wakeOn(); }
   else wakeOff();
 }
@@ -441,8 +517,14 @@ function tick(ts){
   rafId=requestAnimationFrame(tick);
   const dt=Math.min(0.25,(ts-lastTs)/1000); lastTs=ts;
   if(!playing) return;
-  if(hasAudio()) clock=player.currentTime; else clock+=dt;
+  if(esYt()) clock=yt.getCurrentTime()||0;
+  else if(audioURL) clock=player.currentTime;
+  else clock+=dt;
   updateClock();
+  if(esYt()){
+    const d=yt.getDuration()||0;
+    if(d){ $('#seekbar').value=Math.round(clock/d*1000); $('#dur').textContent=fmt(d); }
+  }
   if(isKaraoke()){
     let i=-1; const T=cur.timings, lead=prefs.lead;
     for(let k=0;k<T.length;k++){ if(T[k]!=null && T[k]-lead<=clock) i=k; else if(T[k]!=null) break; }
@@ -459,7 +541,8 @@ function fmt(t){ const m=Math.floor(t/60), s=Math.floor(t%60); return m+':'+Stri
 function updateClock(){ $('#clock').textContent = fmt(clock); }
 function seek(t){
   clock=Math.max(0,t);
-  if(hasAudio()) player.currentTime=clock;
+  if(esYt()){ try{ yt.seekTo(clock, true); }catch(e){} }
+  else if(audioURL) player.currentTime=clock;
   updateClock();
   if(isKaraoke()){
     let i=-1;
@@ -468,7 +551,7 @@ function seek(t){
   }
 }
 function resetAll(){
-  clock=0; if(hasAudio()) player.currentTime=0;
+  clock=0; seek(0);
   updateClock();
   if(isKaraoke()) highlight(-1); else stage.scrollTo({top:0,behavior:'smooth'});
 }
@@ -512,6 +595,7 @@ function renderList(){
       d.appendChild(m);
       if(s.timings){ const t=document.createElement('span'); t.className='tag'; t.textContent='🎤'; d.appendChild(t); }
       if(s.audioName){ const t=document.createElement('span'); t.className='tag'; t.textContent='🎵'; d.appendChild(t); }
+      if(s.yt){ const t=document.createElement('span'); t.className='tag'; t.textContent='YT'; d.appendChild(t); }
       const e=document.createElement('button'); e.className='btn ghost'; e.textContent='✎';
       e.onclick=ev=>{ ev.stopPropagation(); openEdit(s); };
       d.appendChild(e);
@@ -532,6 +616,7 @@ function openEdit(song){
   $('#edArtist').value=song?(song.artist||''):'';
   $('#edLyrics').value=song?toLrc(song):'';
   $('#audioInfo').textContent = song && song.audioName ? ('Audio: '+song.audioName) : 'Sin audio.';
+  $('#edYt').value = song && song.yt ? ('https://youtu.be/'+song.yt) : '';
   ['#btnDelSong','#btnDup','#btnExportLrc'].forEach(s=>$(s).style.display = song?'':'none');
   openS($('#sheetEdit'));
 }
@@ -548,9 +633,12 @@ $('#btnSaveSong').onclick=async ()=>{
   const parsed=parseLyrics($('#edLyrics').value);
   if(!parsed.lines.length){ alert('La letra está vacía.'); return; }
   let s=editing;
-  if(!s){ s={id:uid(), title:'', artist:'', lines:[], timings:null, audioName:null, deleted:false, updatedAt:0}; data.songs.push(s); }
+  if(!s){ s={id:uid(), title:'', artist:'', lines:[], timings:null, audioName:null, yt:null, deleted:false, updatedAt:0}; data.songs.push(s); }
   s.title=title; s.artist=$('#edArtist').value.trim();
   s.lines=parsed.lines; s.timings=parsed.timings; s.updatedAt=now();
+  const vid=$('#edYt').value.trim();
+  if(vid && !idDeYoutube(vid)){ alert('Ese link de YouTube no se entiende. Pegá la URL completa del video.'); return; }
+  s.yt = idDeYoutube(vid);
   if(pendingAudio==='none'){ s.audioName=null; await idbDel(s.id).catch(()=>{}); }
   else if(pendingAudio){ s.audioName=pendingAudio.name; await idbPut(s.id, pendingAudio).catch(()=>toast('No se pudo guardar el audio', true)); }
   if(!editing) cur=s;
@@ -772,28 +860,28 @@ let syncIdx=0, syncMarks=[];
 $('#btnSync').onclick=()=>{
   if(!cur) return;
   closeS($('#sheetCfg'));
-  syncMarks=[]; syncIdx=0; clock=0; setPlaying(false);
-  if(hasAudio()) player.currentTime=0;
+  syncMarks=[]; syncIdx=0; clock=0; setPlaying(false); seek(0);
   updateClock(); document.body.classList.add('syncing');
   highlight(-1); stage.scrollTo({top:0,behavior:'smooth'});
   $('#syncTap').textContent = hasAudio()? '▶ ARRANCAR EL AUDIO' : '▶ ARRANCAR';
 };
 function syncStop(){
   document.body.classList.remove('syncing');
-  playing=false; if(hasAudio()) player.pause();
+  playing=false;
+  if(esYt()){ try{ yt.pauseVideo(); }catch(e){} } else if(audioURL) player.pause();
   $('#btnPlay').textContent='▶'; $('#btnPlay').classList.remove('on');
 }
 $('#syncCancel').onclick=()=>{ syncStop(); render(); };
 $('#syncTap').onclick=()=>{
   // el primer toque solo arranca: asi la intro instrumental no se come la linea 1
   if(!playing){
-    clock=0; if(hasAudio()) player.currentTime=0; setPlaying(true);
+    clock=0; seek(0); setPlaying(true);
     $('#syncTap').textContent='MARCÁ LA 1ª LÍNEA';
     return;
   }
   while(syncIdx<cur.lines.length && !cur.lines[syncIdx].trim()){ syncMarks[syncIdx]=null; syncIdx++; }
   if(syncIdx>=cur.lines.length){ $('#syncSave').click(); return; }
-  syncMarks[syncIdx]=Math.max(0, (hasAudio()?player.currentTime:clock) - 0.15);
+  syncMarks[syncIdx]=Math.max(0, clock - 0.15);
   highlight(syncIdx); syncIdx++;
   const left=cur.lines.slice(syncIdx).filter(l=>l.trim()).length;
   $('#syncTap').textContent = left? ('SIGUIENTE ('+left+' restantes)') : 'ÚLTIMA — GUARDAR';
@@ -808,7 +896,7 @@ $('#syncUndo').onclick=()=>{
   let ancla=0;
   for(let k=syncIdx-1;k>=0;k--){ if(typeof syncMarks[k]==='number'){ ancla=syncMarks[k]; break; } }
   seek(Math.max(0, ancla-1.5));
-  if(playing && hasAudio()) player.play().catch(()=>{});
+  if(playing && audioURL) player.play().catch(()=>{});
   actualizarTapLabel();
 };
 
@@ -855,6 +943,8 @@ function step(d){
 }
 $('#btnNextSong').onclick=()=>step(1);
 $('#btnPrevSong').onclick=()=>step(-1);
+$('#btnYt').onclick=()=>document.body.classList.toggle('ytmin');
+$('#ytHide').onclick=e=>{ e.stopPropagation(); document.body.classList.add('ytmin'); };
 $('#btnZen').onclick=()=>{
   document.body.classList.toggle('zen');
   if(document.fullscreenElement) document.exitFullscreen&&document.exitFullscreen();
