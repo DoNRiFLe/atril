@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b0d10">
+<link rel="manifest" href="atril.webmanifest">
+<link rel="icon" href="atril-192.png">
+<link rel="apple-touch-icon" href="atril-192.png">
+<title>Atril</title>
+<style>
+  :root{
+    --fs: 44px;
+    --bg:#0b0d10; --fg:#e8eaed; --dim:#8b93a1; --accent:#ffd54a;
+    --panel:#151920; --line:#232833; --danger:#ff6b6b; --ok:#4ade80;
+  }
+  :root[data-theme="light"]{
+    --bg:#fbfbf8; --fg:#15181d; --dim:#6b7280; --panel:#ffffff; --line:#e4e6ea; --accent:#c2410c;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0;overscroll-behavior:none}
+  body{
+    background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;
+    display:flex; flex-direction:column;
+    padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
+  }
+  button{font:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  .btn{
+    background:var(--panel); border:1px solid var(--line); border-radius:12px;
+    padding:10px 14px; font-size:16px; font-weight:600; line-height:1;
+    display:inline-flex; align-items:center; gap:8px; white-space:nowrap;
+  }
+  .btn:active{transform:scale(.96)}
+  .btn.on{background:var(--accent); color:#111; border-color:var(--accent)}
+  .btn.ghost{background:none}
+  .btn.wide{width:100%; justify-content:center; padding:14px}
+  .btn[disabled]{opacity:.4}
+
+  header{
+    display:flex; align-items:center; gap:8px; padding:8px 10px;
+    border-bottom:1px solid var(--line); background:var(--panel); flex:0 0 auto;
+  }
+  header .title{
+    flex:1 1 auto; min-width:0; font-weight:700; font-size:17px;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  header .title small{display:block;font-weight:400;font-size:13px;color:var(--dim)}
+  body.zen header, body.zen footer{display:none}
+
+  #stage{flex:1 1 auto; overflow-y:auto; overflow-x:hidden; position:relative; scrollbar-width:none}
+  #stage::-webkit-scrollbar{display:none}
+  #lyrics{
+    padding:40vh 5vw; font-size:var(--fs); line-height:1.35; font-weight:700;
+    letter-spacing:.2px; text-wrap:balance;
+  }
+  .ln{
+    padding:.18em .1em; margin:0; border-radius:.12em;
+    transition:color .18s, opacity .18s; opacity:.42; cursor:pointer;
+  }
+  .ln.blank{min-height:.6em; opacity:0}
+  .ln.done{opacity:.3}
+  .ln.cur{opacity:1; color:var(--accent)}
+  body.plain .ln{opacity:1}
+  body.plain .ln.cur{color:var(--accent)}
+  #empty{padding:20vh 8vw; text-align:center; color:var(--dim); font-size:18px; line-height:1.6}
+
+  footer{
+    flex:0 0 auto; border-top:1px solid var(--line); background:var(--panel);
+    padding:8px 10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
+  }
+  .clock{font-variant-numeric:tabular-nums; font-size:15px; color:var(--dim); min-width:52px; text-align:center}
+  input[type=range]{accent-color:var(--accent); width:100%; height:32px}
+  .ctlbox{display:flex; align-items:center; gap:8px; flex:1 1 180px; min-width:140px}
+  .ctlbox label{font-size:13px;color:var(--dim);white-space:nowrap}
+  #audioBox{display:none}
+  body.hasaudio #audioBox{display:flex}
+  body.hasaudio #speedBox{display:none}
+
+  .sheet{
+    position:fixed; inset:0; background:var(--bg); z-index:50;
+    display:none; flex-direction:column;
+    padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
+  }
+  .sheet.open{display:flex}
+  .sheet header{background:var(--bg)}
+  .sheet .body{flex:1 1 auto; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:12px}
+  .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
+  .song{
+    display:flex; align-items:center; gap:10px; padding:14px 12px;
+    border:1px solid var(--line); border-radius:12px; background:var(--panel);
+  }
+  .song .meta{flex:1 1 auto; min-width:0}
+  .song .meta b{display:block; font-size:17px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .song .meta span{font-size:13px; color:var(--dim)}
+  .tag{font-size:11px; border:1px solid var(--accent); color:var(--accent); border-radius:6px; padding:2px 5px}
+  input[type=text], input[type=password], textarea{
+    width:100%; background:var(--panel); color:var(--fg); border:1px solid var(--line);
+    border-radius:10px; padding:12px; font:inherit; font-size:16px;
+  }
+  textarea{min-height:40vh; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:14px; line-height:1.5}
+  .hint{font-size:13px; color:var(--dim); line-height:1.55; margin:0}
+  .hint code{background:var(--panel); padding:1px 4px; border-radius:4px}
+  .status{font-size:13px; color:var(--dim); min-height:1.2em}
+  .status.ok{color:var(--ok)} .status.err{color:var(--danger)}
+  hr{width:100%;border:none;border-top:1px solid var(--line);margin:4px 0}
+  h3{margin:4px 0 0; font-size:15px; letter-spacing:.04em; text-transform:uppercase; color:var(--dim)}
+
+  .syncbar{
+    position:fixed; left:0; right:0; bottom:0; z-index:40; background:var(--panel);
+    border-top:2px solid var(--accent); padding:10px;
+    padding-bottom:calc(10px + env(safe-area-inset-bottom));
+    display:none; gap:8px; align-items:center;
+  }
+  body.syncing .syncbar{display:flex}
+  body.syncing footer{display:none}
+  .syncbar .big{flex:1 1 auto; background:var(--accent); color:#111; border-radius:12px; padding:18px; font-size:18px; font-weight:800; text-align:center}
+  #cloudDot{width:9px;height:9px;border-radius:50%;background:var(--dim);flex:0 0 auto}
+  #cloudDot.on{background:var(--ok)} #cloudDot.busy{background:var(--accent)} #cloudDot.err{background:var(--danger)}
+</style>
+</head>
+<body>
+
+<header>
+  <button class="btn ghost" id="btnList" title="Temas">☰</button>
+  <div class="title"><span id="hTitle">—</span><small id="hArtist"></small></div>
+  <button class="btn" id="btnMinus">A−</button>
+  <button class="btn" id="btnPlus">A+</button>
+  <button class="btn" id="btnPlay">▶</button>
+  <button class="btn ghost" id="btnCfg">⚙<span id="cloudDot"></span></button>
+</header>
+
+<div id="stage"><div id="lyrics"></div><div id="empty" style="display:none"></div></div>
+
+<footer>
+  <button class="btn" id="btnPrevSong">⏮</button>
+  <button class="btn" id="btnBack">−5s</button>
+  <button class="btn" id="btnReset">⟲</button>
+  <div class="clock" id="clock">0:00</div>
+  <div class="ctlbox" id="speedBox">
+    <label>Vel</label>
+    <input type="range" id="speed" min="5" max="160" value="45">
+  </div>
+  <div class="ctlbox" id="audioBox">
+    <input type="range" id="seekbar" min="0" max="1000" value="0">
+    <span class="clock" id="dur">0:00</span>
+  </div>
+  <button class="btn" id="btnZen" title="Pantalla completa">⛶</button>
+  <button class="btn" id="btnNextSong">⏭</button>
+</footer>
+
+<div class="syncbar">
+  <button class="btn" id="syncCancel">✕</button>
+  <button class="big" id="syncTap">TOCAR EN CADA LÍNEA</button>
+  <button class="btn" id="syncUndo">↶</button>
+  <button class="btn on" id="syncSave">Guardar</button>
+</div>
+
+<!-- Lista -->
+<div class="sheet" id="sheetList">
+  <header>
+    <button class="btn ghost" data-close>✕</button>
+    <div class="title">Temas</div>
+    <button class="btn" id="btnCloudSync" title="Sincronizar con Drive">☁</button>
+    <button class="btn" id="btnNew">+ Nuevo</button>
+  </header>
+  <div class="body">
+    <input type="text" id="search" placeholder="Buscar…" autocomplete="off">
+    <div id="songs" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn" id="btnImport">Importar</button>
+      <button class="btn" id="btnImportUrl">Importar de una URL</button>
+      <button class="btn" id="btnExport">Exportar todo (.json)</button>
+    </div>
+    <div class="status" id="impStatus"></div>
+    <p class="hint">Importa <b>.json</b> (respaldo completo), <b>.lrc</b> (karaoke con tiempos) o <b>.txt</b> (letra suelta).</p>
+  </div>
+</div>
+
+<!-- Editor -->
+<div class="sheet" id="sheetEdit">
+  <header>
+    <button class="btn ghost" data-close>✕</button>
+    <div class="title">Editar tema</div>
+    <button class="btn on" id="btnSaveSong">Guardar</button>
+  </header>
+  <div class="body">
+    <input type="text" id="edTitle" placeholder="Título" autocomplete="off">
+    <input type="text" id="edArtist" placeholder="Artista / banda" autocomplete="off">
+    <textarea id="edLyrics" placeholder="Pegá la letra acá. Una línea por renglón; los renglones vacíos son pausas."></textarea>
+    <p class="hint">Si pegás formato LRC (<code>[00:12.40]</code> al inicio de cada línea) se importan los tiempos solos.</p>
+    <hr>
+    <h3>Audio del tema</h3>
+    <div class="row">
+      <button class="btn" id="btnPickAudio">🎵 Elegir archivo</button>
+      <button class="btn" id="btnDropAudio">Quitar audio</button>
+    </div>
+    <p class="hint" id="audioInfo">Sin audio.</p>
+    <hr>
+    <div class="row">
+      <button class="btn" id="btnDup">Duplicar</button>
+      <button class="btn" id="btnExportLrc">Exportar .lrc</button>
+      <button class="btn" id="btnDelSong" style="color:var(--danger)">Borrar tema</button>
+    </div>
+  </div>
+</div>
+
+<!-- Ajustes -->
+<div class="sheet" id="sheetCfg">
+  <header>
+    <button class="btn ghost" data-close>✕</button>
+    <div class="title">Ajustes</div>
+  </header>
+  <div class="body">
+    <div class="row"><b style="flex:1">Tema</b>
+      <button class="btn" data-theme-set="dark">Oscuro</button>
+      <button class="btn" data-theme-set="light">Claro</button>
+    </div>
+    <div>
+      <div class="row"><b style="flex:1">Tamaño de letra</b><span id="fsVal" class="clock"></span></div>
+      <input type="range" id="fsRange" min="20" max="140" step="2">
+    </div>
+    <div class="row"><b style="flex:1">Atenuar líneas inactivas</b><button class="btn" id="btnDim">—</button></div>
+    <div class="row"><b style="flex:1">Pantalla siempre encendida</b><button class="btn" id="btnWake">—</button></div>
+
+    <hr>
+    <h3>Karaoke</h3>
+    <div>
+      <div class="row"><b style="flex:1">Adelanto de la línea</b><span id="leadVal" class="clock"></span></div>
+      <input type="range" id="leadRange" min="0" max="150" step="5">
+      <p class="hint">Cuánto antes se resalta cada línea, para llegar a leerla. Se aplica
+      al reproducir, así que lo cambiás cuando querés sin volver a sincronizar.</p>
+    </div>
+    <button class="btn wide" id="btnSync">🎤 Sincronizar tap a tap</button>
+    <button class="btn wide" id="btnClearTimings">Borrar tiempos de este tema</button>
+    <p class="hint">Si el tema tiene audio cargado, la sincronización corre contra el audio real: los tiempos quedan exactos y sirven en cualquier dispositivo.</p>
+
+    <hr>
+    <h3>Google Drive</h3>
+    <div class="row">
+      <button class="btn" id="btnGConnect">Conectar</button>
+      <button class="btn" id="btnGSync">Sincronizar ahora</button>
+      <button class="btn" id="btnGOut">Desconectar</button>
+    </div>
+    <div class="status" id="gStatus">Sin configurar.</div>
+    <div class="row"><b style="flex:1">Sincronizar solo al guardar</b><button class="btn" id="btnGAuto">—</button></div>
+    <div class="row"><b style="flex:1">Subir también los audios</b><button class="btn" id="btnGAudio">—</button></div>
+    <details>
+      <summary class="hint" style="cursor:pointer;padding:6px 0">Configurar Client ID de Google</summary>
+      <div style="display:flex;flex-direction:column;gap:8px;padding-top:8px">
+        <input type="text" id="gClientId" placeholder="xxxxx.apps.googleusercontent.com" autocomplete="off">
+        <button class="btn" id="btnGSaveId">Guardar Client ID</button>
+        <p class="hint">
+          1. Entrá a <code>console.cloud.google.com</code> → creá un proyecto.<br>
+          2. <i>APIs y servicios</i> → habilitá <b>Google Drive API</b>.<br>
+          3. <i>Pantalla de consentimiento OAuth</i> → tipo <b>Externo</b>, y agregate como <b>usuario de prueba</b>.<br>
+          4. <i>Credenciales</i> → <b>ID de cliente OAuth</b> → tipo <b>Aplicación web</b>.<br>
+          5. En <i>Orígenes autorizados de JavaScript</i> poné la URL exacta desde donde abrís este archivo
+          (por ejemplo <code>https://tu-app.vercel.app</code> o <code>http://localhost:3000</code>).<br>
+          6. Copiá el Client ID acá y tocá Conectar.<br><br>
+          La app usa el scope <b>appdata</b>: guarda en una carpeta privada de tu Drive que solo ve esta app.
+          No puede leer ni tocar el resto de tus archivos.
+        </p>
+      </div>
+    </details>
+    <p class="hint" id="gWarn"></p>
+  </div>
+</div>
+
+<input type="file" id="fileIn" accept=".json,.lrc,.txt,application/json,text/plain" style="display:none" multiple>
+<input type="file" id="audioIn" accept="audio/*" style="display:none">
+<audio id="player" preload="auto"></audio>
+
+<script>
+(function(){
+"use strict";
+const $ = s => document.querySelector(s);
+const LS_DATA='atril.data.v2', LS_PREFS='atril.prefs.v2', LS_G='atril.gdrive.v1';
+const SCOPE='https://www.googleapis.com/auth/drive.appdata';
+const now = ()=>Date.now();
+
+/* ============ datos ============ */
+const DEMO = {version:2, songs:[{
+  id:'demo', title:'Cómo usar el atril', artist:'Leeme primero',
+  lines:['Pegá tus letras desde el menú ☰','','Tocá A+ o A− para el tamaño','o pellizcá con dos dedos','','Con ▶ la letra baja sola','','Si cargás el audio del tema','el karaoke queda clavado al segundo','','Ajustes ⚙ → Sincronizar','y tocás una vez por línea','','Se guarda en la tablet y en tu Drive.'],
+  timings:null, audioName:null, updatedAt:0
+}], updatedAt:0};
+
+let data = migrate(load(LS_DATA)) || DEMO;
+let prefs = Object.assign({fs:44, speed:45, theme:'dark', dim:true, wake:true, lead:0.3, last:null}, load(LS_PREFS)||{});
+let gcfg  = Object.assign({clientId:'', token:'', exp:0, auto:true, audio:true, fileId:'', lastSync:0}, load(LS_G)||{});
+let cur = null;
+
+function load(k){ try{ return JSON.parse(localStorage.getItem(k)||'null'); }catch(e){ return null; } }
+function migrate(d){
+  if(!d) { const old=load('atril.data.v1'); if(old) d=old; else return null; }
+  d.version=2; d.updatedAt=d.updatedAt||0;
+  d.songs=(d.songs||[]).map(s=>Object.assign({audioName:null, updatedAt:0, deleted:false}, s));
+  return d;
+}
+function saveData(touch){
+  if(touch) data.updatedAt=now();
+  try{ localStorage.setItem(LS_DATA, JSON.stringify(data)); }
+  catch(e){ toast('No se pudo guardar local (memoria llena)', true); }
+  if(touch && gcfg.auto && gcfg.clientId && gcfg.token) scheduleSync();
+}
+function savePrefs(){ prefs.last = cur?cur.id:null; try{ localStorage.setItem(LS_PREFS, JSON.stringify(prefs)); }catch(e){} }
+function saveG(){ try{ localStorage.setItem(LS_G, JSON.stringify(gcfg)); }catch(e){} }
+function uid(){ return 's'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function live(){ return data.songs.filter(s=>!s.deleted); }
+
+/* ============ IndexedDB para los audios ============ */
+let idb=null;
+function db(){
+  if(idb) return Promise.resolve(idb);
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open('atril',1);
+    r.onupgradeneeded=()=>{ r.result.createObjectStore('audio'); };
+    r.onsuccess=()=>{ idb=r.result; res(idb); };
+    r.onerror=()=>rej(r.error);
+  });
+}
+function idbPut(k,v){ return db().then(d=>new Promise((res,rej)=>{
+  const t=d.transaction('audio','readwrite'); t.objectStore('audio').put(v,k);
+  t.oncomplete=res; t.onerror=()=>rej(t.error);
+})); }
+function idbGet(k){ return db().then(d=>new Promise((res,rej)=>{
+  const r=d.transaction('audio','readonly').objectStore('audio').get(k);
+  r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error);
+})); }
+function idbDel(k){ return db().then(d=>new Promise((res,rej)=>{
+  const t=d.transaction('audio','readwrite'); t.objectStore('audio').delete(k);
+  t.oncomplete=res; t.onerror=()=>rej(t.error);
+})); }
+
+/* ============ LRC ============ */
+const LRC_RE = /^\s*((?:\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\])+)(.*)$/;
+function parseLyrics(text){
+  const raw = text.replace(/\r/g,'').split('\n');
+  const lines=[], timings=[]; let any=false;
+  for(const r of raw){
+    const m = r.match(LRC_RE);
+    if(m){
+      any=true;
+      const stamps=[...m[1].matchAll(/\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g)];
+      const body=m[2].trim();
+      for(const s of stamps){
+        const frac = s[3] ? parseFloat('0.'+s[3]) : 0;
+        lines.push(body); timings.push(parseInt(s[1],10)*60 + parseInt(s[2],10) + frac);
+      }
+    } else if(/^\s*\[[a-z]+:.*\]\s*$/i.test(r)){ /* metadata lrc */ }
+    else { lines.push(r.trim()); timings.push(null); }
+  }
+  if(any){
+    const idx = lines.map((l,i)=>i).filter(i=>timings[i]!=null).sort((a,b)=>timings[a]-timings[b]);
+    if(idx.length){
+      const L=[],T=[]; for(const i of idx){ L.push(lines[i]); T.push(timings[i]); }
+      return {lines:L, timings:T};
+    }
+  }
+  while(lines.length && !lines[lines.length-1]) lines.pop();
+  return {lines, timings:null};
+}
+function toLrc(song){
+  if(!song.timings) return song.lines.join('\n');
+  const pad=(n,w)=>String(n).padStart(w,'0');
+  return song.lines.map((l,i)=>{
+    const t=song.timings[i]; if(t==null) return l;
+    const m=Math.floor(t/60), s=t-m*60;
+    return '['+pad(m,2)+':'+pad(Math.floor(s),2)+'.'+pad(Math.round((s%1)*100),2)+']'+l;
+  }).join('\n');
+}
+
+/* ============ render ============ */
+const stage=$('#stage'), lyrics=$('#lyrics'), empty=$('#empty'), player=$('#player');
+let lineEls=[], active=-1, audioURL=null;
+
+function render(){
+  $('#hTitle').textContent = cur ? cur.title : 'Sin temas';
+  $('#hArtist').textContent = cur ? (cur.artist||'') : '';
+  lyrics.innerHTML=''; lineEls=[]; active=-1;
+  if(!cur){ empty.style.display='block'; empty.innerHTML='No hay temas cargados.<br>Tocá ☰ → <b>+ Nuevo</b>.'; loadAudio(); return; }
+  empty.style.display='none';
+  cur.lines.forEach((txt,i)=>{
+    const p=document.createElement('p');
+    p.className='ln'+(txt.trim()?'':' blank');
+    p.textContent=txt||' '; p.dataset.i=i;
+    lyrics.appendChild(p); lineEls.push(p);
+  });
+  stage.scrollTop=0; clock=0; updateClock(); highlight(-1);
+  loadAudio();
+}
+function isKaraoke(){ return !!(cur && cur.timings && cur.timings.length); }
+function hasAudio(){ return !!audioURL; }
+function highlight(i){
+  if(i===active) return;
+  if(lineEls[active]) lineEls[active].classList.remove('cur');
+  for(let k=0;k<lineEls.length;k++) lineEls[k].classList.toggle('done', k<i);
+  active=i;
+  if(lineEls[i]){
+    lineEls[i].classList.add('cur');
+    const r=lineEls[i].offsetTop - stage.clientHeight*0.42 + lineEls[i].offsetHeight/2;
+    stage.scrollTo({top:r, behavior:'smooth'});
+  }
+}
+
+/* ============ audio ============ */
+async function loadAudio(){
+  setPlaying(false);
+  if(audioURL){ URL.revokeObjectURL(audioURL); audioURL=null; }
+  player.removeAttribute('src'); player.load();
+  document.body.classList.remove('hasaudio');
+  if(cur && cur.audioName){
+    let blob = await idbGet(cur.id).catch(()=>null);
+    if(!blob && gcfg.token && gcfg.audio){ blob = await gPullAudio(cur).catch(()=>null); }
+    if(blob){
+      audioURL=URL.createObjectURL(blob); player.src=audioURL;
+      document.body.classList.add('hasaudio');
+    }
+  }
+}
+player.addEventListener('loadedmetadata',()=>{ $('#dur').textContent=fmt(player.duration||0); });
+player.addEventListener('timeupdate',()=>{
+  if(!hasAudio()) return;
+  if(player.duration) $('#seekbar').value = Math.round(player.currentTime/player.duration*1000);
+});
+player.addEventListener('ended',()=>setPlaying(false));
+$('#seekbar').oninput=e=>{ if(player.duration) seek(e.target.value/1000*player.duration); };
+
+/* ============ reproducción ============ */
+let playing=false, clock=0, rafId=null, lastTs=0, scrollAcc=0;
+function setPlaying(v){
+  playing=v; $('#btnPlay').textContent = v?'⏸':'▶'; $('#btnPlay').classList.toggle('on',v);
+  if(hasAudio()){ if(v) player.play().catch(()=>{}); else player.pause(); }
+  if(v){ lastTs=performance.now(); scrollAcc=0; if(!rafId) rafId=requestAnimationFrame(tick); wakeOn(); }
+  else wakeOff();
+}
+function tick(ts){
+  rafId=requestAnimationFrame(tick);
+  const dt=Math.min(0.25,(ts-lastTs)/1000); lastTs=ts;
+  if(!playing) return;
+  if(hasAudio()) clock=player.currentTime; else clock+=dt;
+  updateClock();
+  if(isKaraoke()){
+    let i=-1; const T=cur.timings, lead=prefs.lead;
+    for(let k=0;k<T.length;k++){ if(T[k]!=null && T[k]-lead<=clock) i=k; else if(T[k]!=null) break; }
+    highlight(i);
+    if(!hasAudio() && i>=T.length-1 && clock>T[T.length-1]+8) setPlaying(false);
+  } else if(!hasAudio()){
+    scrollAcc += (prefs.speed/2) * dt;
+    const px=Math.floor(scrollAcc);
+    if(px>0){ scrollAcc-=px; stage.scrollTop+=px; }
+    if(stage.scrollTop + stage.clientHeight >= stage.scrollHeight-2) setPlaying(false);
+  }
+}
+function fmt(t){ const m=Math.floor(t/60), s=Math.floor(t%60); return m+':'+String(s).padStart(2,'0'); }
+function updateClock(){ $('#clock').textContent = fmt(clock); }
+function seek(t){
+  clock=Math.max(0,t);
+  if(hasAudio()) player.currentTime=clock;
+  updateClock();
+  if(isKaraoke()){
+    let i=-1;
+    for(let k=0;k<cur.timings.length;k++) if(cur.timings[k]!=null && cur.timings[k]-prefs.lead<=clock) i=k;
+    highlight(i);
+  }
+}
+function resetAll(){
+  clock=0; if(hasAudio()) player.currentTime=0;
+  updateClock();
+  if(isKaraoke()) highlight(-1); else stage.scrollTo({top:0,behavior:'smooth'});
+}
+
+/* ============ wake lock ============ */
+let wl=null;
+async function wakeOn(){
+  if(!prefs.wake || wl || !('wakeLock' in navigator)) return;
+  try{ wl = await navigator.wakeLock.request('screen'); wl.addEventListener('release',()=>{wl=null;}); }catch(e){}
+}
+function wakeOff(){ if(wl){ try{wl.release();}catch(e){} wl=null; } }
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && playing) wakeOn(); });
+
+/* ============ prefs ============ */
+function applyPrefs(){
+  document.documentElement.style.setProperty('--fs', prefs.fs+'px');
+  document.documentElement.dataset.theme = prefs.theme;
+  document.body.classList.toggle('plain', !prefs.dim);
+  $('#speed').value=prefs.speed; $('#fsRange').value=prefs.fs; $('#fsVal').textContent=prefs.fs+'px';
+  $('#leadRange').value=Math.round(prefs.lead*100); $('#leadVal').textContent=prefs.lead.toFixed(2)+'s';
+  $('#btnDim').textContent = prefs.dim?'Sí':'No'; $('#btnDim').classList.toggle('on',prefs.dim);
+  $('#btnWake').textContent = prefs.wake?'Sí':'No'; $('#btnWake').classList.toggle('on',prefs.wake);
+  $('#btnGAuto').textContent = gcfg.auto?'Sí':'No'; $('#btnGAuto').classList.toggle('on',gcfg.auto);
+  $('#btnGAudio').textContent = gcfg.audio?'Sí':'No'; $('#btnGAudio').classList.toggle('on',gcfg.audio);
+  savePrefs();
+}
+function setFs(v){ prefs.fs=Math.max(20,Math.min(140,Math.round(v))); applyPrefs(); }
+
+/* ============ lista ============ */
+function renderList(){
+  const q=$('#search').value.trim().toLowerCase();
+  const box=$('#songs'); box.innerHTML='';
+  live()
+    .filter(s=>!q || (s.title+' '+(s.artist||'')+' '+s.lines.join(' ')).toLowerCase().includes(q))
+    .forEach(s=>{
+      const d=document.createElement('div'); d.className='song';
+      const m=document.createElement('div'); m.className='meta';
+      m.innerHTML='<b></b><span></span>';
+      m.querySelector('b').textContent=s.title;
+      m.querySelector('span').textContent=(s.artist||'—')+' · '+s.lines.filter(l=>l.trim()).length+' líneas';
+      d.appendChild(m);
+      if(s.timings){ const t=document.createElement('span'); t.className='tag'; t.textContent='🎤'; d.appendChild(t); }
+      if(s.audioName){ const t=document.createElement('span'); t.className='tag'; t.textContent='🎵'; d.appendChild(t); }
+      const e=document.createElement('button'); e.className='btn ghost'; e.textContent='✎';
+      e.onclick=ev=>{ ev.stopPropagation(); openEdit(s); };
+      d.appendChild(e);
+      m.onclick=()=>{ cur=s; render(); savePrefs(); closeS($('#sheetList')); };
+      box.appendChild(d);
+    });
+  if(!box.children.length) box.innerHTML='<p class="hint">Nada por acá.</p>';
+}
+function openS(el){ el.classList.add('open'); }
+function closeS(el){ el.classList.remove('open'); }
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeS(b.closest('.sheet')));
+
+/* ============ editor ============ */
+let editing=null, pendingAudio=null;
+function openEdit(song){
+  editing=song; pendingAudio=null;
+  $('#edTitle').value=song?song.title:'';
+  $('#edArtist').value=song?(song.artist||''):'';
+  $('#edLyrics').value=song?toLrc(song):'';
+  $('#audioInfo').textContent = song && song.audioName ? ('Audio: '+song.audioName) : 'Sin audio.';
+  ['#btnDelSong','#btnDup','#btnExportLrc'].forEach(s=>$(s).style.display = song?'':'none');
+  openS($('#sheetEdit'));
+}
+$('#btnNew').onclick=()=>openEdit(null);
+$('#btnPickAudio').onclick=()=>$('#audioIn').click();
+$('#audioIn').onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  pendingAudio=f; $('#audioInfo').textContent='Audio nuevo: '+f.name+' ('+Math.round(f.size/1048576*10)/10+' MB) — se aplica al guardar';
+  e.target.value='';
+};
+$('#btnDropAudio').onclick=()=>{ pendingAudio='none'; $('#audioInfo').textContent='Se va a quitar el audio al guardar.'; };
+$('#btnSaveSong').onclick=async ()=>{
+  const title=$('#edTitle').value.trim()||'Sin título';
+  const parsed=parseLyrics($('#edLyrics').value);
+  if(!parsed.lines.length){ alert('La letra está vacía.'); return; }
+  let s=editing;
+  if(!s){ s={id:uid(), title:'', artist:'', lines:[], timings:null, audioName:null, deleted:false, updatedAt:0}; data.songs.push(s); }
+  s.title=title; s.artist=$('#edArtist').value.trim();
+  s.lines=parsed.lines; s.timings=parsed.timings; s.updatedAt=now();
+  if(pendingAudio==='none'){ s.audioName=null; await idbDel(s.id).catch(()=>{}); }
+  else if(pendingAudio){ s.audioName=pendingAudio.name; await idbPut(s.id, pendingAudio).catch(()=>toast('No se pudo guardar el audio', true)); }
+  if(!editing) cur=s;
+  saveData(true); renderList(); closeS($('#sheetEdit'));
+  if(cur===s) render();
+  if(gcfg.token && gcfg.audio && pendingAudio && pendingAudio!=='none') gPushAudio(s).catch(()=>{});
+};
+$('#btnDelSong').onclick=async ()=>{
+  if(!editing || !confirm('¿Borrar "'+editing.title+'"?')) return;
+  editing.deleted=true; editing.lines=[]; editing.timings=null; editing.updatedAt=now();
+  await idbDel(editing.id).catch(()=>{});
+  if(cur===editing) cur=live()[0]||null;
+  saveData(true); render(); renderList(); closeS($('#sheetEdit'));
+};
+$('#btnDup').onclick=()=>{
+  if(!editing) return;
+  const c=JSON.parse(JSON.stringify(editing));
+  c.id=uid(); c.title=editing.title+' (copia)'; c.audioName=null; c.updatedAt=now();
+  data.songs.push(c); saveData(true); renderList(); openEdit(c);
+};
+$('#btnExportLrc').onclick=()=>{ if(editing) download(editing.title+'.lrc', toLrc(editing)); };
+
+/* ============ import / export ============ */
+function download(name, text){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([text],{type:'text/plain;charset=utf-8'}));
+  a.download=name.replace(/[\\/:*?"<>|]/g,'_'); a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+}
+$('#btnExport').onclick=()=>download('atril-respaldo.json', JSON.stringify(data,null,1));
+$('#btnImportUrl').onclick=async ()=>{
+  const st=$('#impStatus');
+  const guess = location.protocol.startsWith('http') ? (location.origin+'/atril-respaldo.json') : '';
+  const url = prompt('URL del respaldo .json\n\nSi lo estás sirviendo desde la PC con tools/servir.js,\nponé el archivo en public/ y usá la dirección de esa PC.', guess);
+  if(!url) return;
+  st.className='status'; st.textContent='Bajando…';
+  try{
+    const r = await fetch(url, {cache:'no-store'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const o = await r.json();
+    const n = mergeData(Array.isArray(o) ? {songs:o} : o);
+    if(!n){ st.className='status'; st.textContent='Sin novedades: ya tenías todo.'; return; }
+    saveData(true);
+    if(!cur || !live().includes(cur)) cur=live()[0]||null;
+    render(); renderList();
+    st.className='status ok'; st.textContent=n+' temas importados.';
+  }catch(e){
+    st.className='status err';
+    st.textContent='No se pudo: '+e.message+'. Revisá la URL y que ambos estén en la misma red.';
+  }
+};
+$('#btnImport').onclick=()=>$('#fileIn').click();
+$('#fileIn').onchange=async e=>{
+  for(const f of e.target.files){
+    const txt=await f.text();
+    if(/\.json$/i.test(f.name)){
+      try{
+        const o=JSON.parse(txt), list=Array.isArray(o)?o:(o.songs||[]); let n=0;
+        for(const s of list){
+          if(!s || !Array.isArray(s.lines) || s.deleted) continue;
+          data.songs.push({id:uid(), title:s.title||'Sin título', artist:s.artist||'', lines:s.lines,
+                           timings:s.timings||null, audioName:null, deleted:false, updatedAt:now()});
+          n++;
+        }
+        toast('Importados '+n+' temas.');
+      }catch(err){ toast('JSON inválido: '+f.name, true); }
+    } else {
+      const p=parseLyrics(txt);
+      data.songs.push({id:uid(), title:f.name.replace(/\.(lrc|txt)$/i,''), artist:'', lines:p.lines,
+                       timings:p.timings, audioName:null, deleted:false, updatedAt:now()});
+    }
+  }
+  e.target.value=''; saveData(true); renderList();
+};
+
+/* ============ Google Drive ============ */
+let gsiReady=false, tokenClient=null, syncTimer=null, syncing=false;
+function gStat(msg, cls){ $('#gStatus').textContent=msg; $('#gStatus').className='status '+(cls||''); }
+function dot(cls){ $('#cloudDot').className = cls||''; }
+function toast(msg, err){ gStat(msg, err?'err':'ok'); if(err) console.warn(msg); }
+
+function gLoadGsi(){
+  if(gsiReady) return Promise.resolve(true);
+  return new Promise(res=>{
+    if(window.google && google.accounts){ gsiReady=true; return res(true); }
+    const s=document.createElement('script');
+    s.src='https://accounts.google.com/gsi/client'; s.async=true;
+    s.onload=()=>{ gsiReady=true; res(true); };
+    s.onerror=()=>res(false);
+    document.head.appendChild(s);
+  });
+}
+function tokenValid(){ return gcfg.token && gcfg.exp > now()+60000; }
+async function gAuth(interactive){
+  if(!gcfg.clientId){ gStat('Falta el Client ID (abrí "Configurar Client ID").','err'); return null; }
+  if(tokenValid()) return gcfg.token;
+  if(!await gLoadGsi()){ gStat('No se pudo cargar Google (¿sin internet?).','err'); return null; }
+  return new Promise(res=>{
+    try{
+      tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: gcfg.clientId, scope: SCOPE,
+        callback: r=>{
+          if(r && r.access_token){
+            gcfg.token=r.access_token; gcfg.exp=now()+(r.expires_in||3600)*1000; saveG();
+            dot('on'); res(gcfg.token);
+          } else { gStat('No se obtuvo el permiso.','err'); dot('err'); res(null); }
+        },
+        error_callback: err=>{ gStat('Error de Google: '+(err&&err.type||'desconocido'),'err'); dot('err'); res(null); }
+      });
+      tokenClient.requestAccessToken({prompt: interactive?'consent':''});
+    }catch(e){ gStat('Error: '+e.message,'err'); res(null); }
+  });
+}
+async function gFetch(url, opts){
+  opts=opts||{}; opts.headers=Object.assign({Authorization:'Bearer '+gcfg.token}, opts.headers||{});
+  let r=await fetch(url, opts);
+  if(r.status===401){
+    gcfg.token=''; gcfg.exp=0; saveG();
+    if(await gAuth(false)){ opts.headers.Authorization='Bearer '+gcfg.token; r=await fetch(url,opts); }
+  }
+  if(!r.ok) throw new Error('Drive '+r.status+' '+(await r.text()).slice(0,120));
+  return r;
+}
+async function gFind(name){
+  const q=encodeURIComponent("name='"+name+"' and trashed=false");
+  const r=await gFetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q='+q+'&fields=files(id,name,modifiedTime)');
+  const j=await r.json();
+  return (j.files&&j.files[0])||null;
+}
+async function gUpload(name, blob, mime, fileId){
+  const meta = fileId ? {} : {name, parents:['appDataFolder']};
+  const fd=new FormData();
+  fd.append('metadata', new Blob([JSON.stringify(meta)],{type:'application/json'}));
+  fd.append('file', blob, name);
+  const url='https://www.googleapis.com/upload/drive/v3/files'+(fileId?('/'+fileId):'')+'?uploadType=multipart&fields=id';
+  const r=await gFetch(url, {method: fileId?'PATCH':'POST', body:fd});
+  return (await r.json()).id;
+}
+async function gDownload(fileId){
+  const r=await gFetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media');
+  return r.blob();
+}
+
+/* merge: gana el updatedAt más nuevo por tema */
+function mergeData(remote){
+  if(!remote || !Array.isArray(remote.songs)) return 0;
+  remote.songs.forEach(s=>{ if(!s.id) s.id=uid(); if(!s.updatedAt) s.updatedAt=now(); });
+  const byId={}; data.songs.forEach(s=>byId[s.id]=s);
+  let changed=0;
+  for(const rs of remote.songs){
+    const ls=byId[rs.id];
+    if(!ls){ data.songs.push(Object.assign({audioName:null,deleted:false,updatedAt:0}, rs)); changed++; }
+    else if((rs.updatedAt||0) > (ls.updatedAt||0)){ Object.assign(ls, rs); changed++; }
+  }
+  // limpiar tombstones viejos (60 días)
+  const lim=now()-60*86400000;
+  data.songs=data.songs.filter(s=>!(s.deleted && (s.updatedAt||0)<lim));
+  return changed;
+}
+async function gSync(interactive){
+  if(syncing) return;
+  if(!gcfg.clientId){ gStat('Falta el Client ID.','err'); return; }
+  if(!tokenValid() && !await gAuth(!!interactive)) return;
+  syncing=true; dot('busy'); gStat('Sincronizando…');
+  try{
+    let f = gcfg.fileId ? {id:gcfg.fileId} : await gFind('atril.json');
+    let changed=0;
+    if(f){
+      gcfg.fileId=f.id;
+      try{
+        const remote=JSON.parse(await (await gDownload(f.id)).text());
+        changed=mergeData(remote);
+      }catch(e){ if(!/404/.test(e.message)) throw e; gcfg.fileId=''; f=null; }
+    }
+    const payload=new Blob([JSON.stringify(data)],{type:'application/json'});
+    gcfg.fileId = await gUpload('atril.json', payload, 'application/json', gcfg.fileId||null);
+    gcfg.lastSync=now(); saveG();
+    try{ localStorage.setItem(LS_DATA, JSON.stringify(data)); }catch(e){}
+    if(changed){ if(!cur || !live().includes(cur)) cur=live()[0]||null; render(); renderList(); }
+    dot('on'); gStat('Listo — '+new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})+(changed?(' · '+changed+' temas actualizados'):''),'ok');
+  }catch(e){ dot('err'); gStat('Falló: '+e.message,'err'); }
+  finally{ syncing=false; }
+}
+function scheduleSync(){ clearTimeout(syncTimer); syncTimer=setTimeout(()=>gSync(false), 2500); }
+
+async function gPushAudio(s){
+  if(!s.audioName || !tokenValid()) return;
+  const blob=await idbGet(s.id); if(!blob) return;
+  dot('busy'); gStat('Subiendo audio de "'+s.title+'"…');
+  const name='audio-'+s.id;
+  const ex=await gFind(name);
+  await gUpload(name, blob, blob.type||'audio/mpeg', ex?ex.id:null);
+  dot('on'); gStat('Audio subido.','ok');
+}
+async function gPullAudio(s){
+  if(!tokenValid()) return null;
+  const f=await gFind('audio-'+s.id); if(!f) return null;
+  const blob=await gDownload(f.id);
+  await idbPut(s.id, blob).catch(()=>{});
+  return blob;
+}
+
+$('#btnGSaveId').onclick=()=>{
+  gcfg.clientId=$('#gClientId').value.trim(); gcfg.token=''; gcfg.exp=0; gcfg.fileId=''; saveG();
+  gStat(gcfg.clientId?'Client ID guardado. Tocá Conectar.':'Client ID borrado.');
+};
+$('#btnGConnect').onclick=async ()=>{ if(await gAuth(true)) gSync(true); };
+$('#btnGSync').onclick=()=>gSync(true);
+$('#btnCloudSync').onclick=()=>{ gSync(true).then(renderList); };
+$('#btnGOut').onclick=()=>{
+  if(gcfg.token && window.google && google.accounts) try{ google.accounts.oauth2.revoke(gcfg.token); }catch(e){}
+  gcfg.token=''; gcfg.exp=0; gcfg.fileId=''; saveG(); dot(''); gStat('Desconectado.');
+};
+$('#btnGAuto').onclick=()=>{ gcfg.auto=!gcfg.auto; saveG(); applyPrefs(); };
+$('#btnGAudio').onclick=()=>{ gcfg.audio=!gcfg.audio; saveG(); applyPrefs(); };
+
+/* ============ sincronizar tap a tap ============ */
+let syncIdx=0, syncMarks=[];
+$('#btnSync').onclick=()=>{
+  if(!cur) return;
+  closeS($('#sheetCfg'));
+  syncMarks=[]; syncIdx=0; clock=0; setPlaying(false);
+  if(hasAudio()) player.currentTime=0;
+  updateClock(); document.body.classList.add('syncing');
+  highlight(-1); stage.scrollTo({top:0,behavior:'smooth'});
+  $('#syncTap').textContent = hasAudio()? '▶ ARRANCAR EL AUDIO' : '▶ ARRANCAR';
+};
+function syncStop(){
+  document.body.classList.remove('syncing');
+  playing=false; if(hasAudio()) player.pause();
+  $('#btnPlay').textContent='▶'; $('#btnPlay').classList.remove('on');
+}
+$('#syncCancel').onclick=()=>{ syncStop(); render(); };
+$('#syncTap').onclick=()=>{
+  // el primer toque solo arranca: asi la intro instrumental no se come la linea 1
+  if(!playing){
+    clock=0; if(hasAudio()) player.currentTime=0; setPlaying(true);
+    $('#syncTap').textContent='MARCÁ LA 1ª LÍNEA';
+    return;
+  }
+  while(syncIdx<cur.lines.length && !cur.lines[syncIdx].trim()){ syncMarks[syncIdx]=null; syncIdx++; }
+  if(syncIdx>=cur.lines.length){ $('#syncSave').click(); return; }
+  syncMarks[syncIdx]=Math.max(0, (hasAudio()?player.currentTime:clock) - 0.15);
+  highlight(syncIdx); syncIdx++;
+  const left=cur.lines.slice(syncIdx).filter(l=>l.trim()).length;
+  $('#syncTap').textContent = left? ('SIGUIENTE ('+left+' restantes)') : 'ÚLTIMA — GUARDAR';
+};
+$('#syncUndo').onclick=()=>{
+  // retrocede hasta la linea con texto anterior y borra su marca
+  do{ syncIdx--; }while(syncIdx>0 && !(cur.lines[syncIdx]||'').trim());
+  if(syncIdx<0) syncIdx=0;
+  syncMarks[syncIdx]=undefined;
+  highlight(syncIdx-1);
+  // rebobina un poco antes de la ultima marca buena, para re-escuchar esa parte
+  let ancla=0;
+  for(let k=syncIdx-1;k>=0;k--){ if(typeof syncMarks[k]==='number'){ ancla=syncMarks[k]; break; } }
+  seek(Math.max(0, ancla-1.5));
+  if(playing && hasAudio()) player.play().catch(()=>{});
+  actualizarTapLabel();
+};
+
+function actualizarTapLabel(){
+  if(!playing){ $('#syncTap').textContent = hasAudio()? '▶ ARRANCAR EL AUDIO' : '▶ ARRANCAR'; return; }
+  const marcadas = syncMarks.filter(v=>typeof v==='number').length;
+  const left = cur.lines.slice(syncIdx).filter(l=>l.trim()).length;
+  if(!marcadas){ $('#syncTap').textContent='MARCÁ LA 1ª LÍNEA'; return; }
+  $('#syncTap').textContent = left? ('SIGUIENTE ('+left+' restantes)') : 'ÚLTIMA — GUARDAR';
+}
+$('#syncSave').onclick=()=>{
+  if(!syncMarks.some(v=>typeof v==='number')){ syncStop(); render(); return; }
+  const T=cur.lines.map((l,i)=> typeof syncMarks[i]==='number' ? syncMarks[i] : null);
+  let lastT=0;
+  for(let i=0;i<T.length;i++){ if(T[i]==null) T[i]=lastT; else lastT=T[i]; }
+  cur.timings=T; cur.updatedAt=now();
+  saveData(true); syncStop(); render(); renderList();
+  gStat('Karaoke guardado.','ok');
+};
+$('#btnClearTimings').onclick=()=>{
+  if(!cur||!cur.timings) return;
+  cur.timings=null; cur.updatedAt=now(); saveData(true); render(); renderList(); closeS($('#sheetCfg'));
+};
+
+/* ============ controles ============ */
+$('#btnPlay').onclick=()=>setPlaying(!playing);
+$('#btnPlus').onclick=()=>setFs(prefs.fs+4);
+$('#btnMinus').onclick=()=>setFs(prefs.fs-4);
+$('#btnBack').onclick=()=>{ if(isKaraoke()||hasAudio()) seek(clock-5); else stage.scrollTop-=stage.clientHeight*0.4; };
+$('#btnReset').onclick=resetAll;
+$('#btnList').onclick=()=>{ renderList(); openS($('#sheetList')); };
+$('#btnCfg').onclick=()=>{ applyPrefs(); $('#gClientId').value=gcfg.clientId; openS($('#sheetCfg')); };
+$('#search').oninput=renderList;
+$('#speed').oninput=e=>{ prefs.speed=+e.target.value; savePrefs(); };
+$('#fsRange').oninput=e=>setFs(+e.target.value);
+$('#leadRange').oninput=e=>{ prefs.lead=(+e.target.value)/100; applyPrefs(); if(isKaraoke()) seek(clock); };
+$('#btnDim').onclick=()=>{ prefs.dim=!prefs.dim; applyPrefs(); };
+$('#btnWake').onclick=()=>{ prefs.wake=!prefs.wake; if(!prefs.wake) wakeOff(); else if(playing) wakeOn(); applyPrefs(); };
+document.querySelectorAll('[data-theme-set]').forEach(b=>b.onclick=()=>{ prefs.theme=b.dataset.themeSet; applyPrefs(); });
+function step(d){
+  const L=live(); if(!L.length) return;
+  let i=L.indexOf(cur); i=(i+d+L.length)%L.length;
+  cur=L[i]; render(); savePrefs();
+}
+$('#btnNextSong').onclick=()=>step(1);
+$('#btnPrevSong').onclick=()=>step(-1);
+$('#btnZen').onclick=()=>{
+  document.body.classList.toggle('zen');
+  if(document.fullscreenElement) document.exitFullscreen&&document.exitFullscreen();
+  else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(()=>{});
+};
+
+stage.addEventListener('click', e=>{
+  if(document.body.classList.contains('syncing')) return;
+  const ln=e.target.closest('.ln');
+  if(ln && isKaraoke()){
+    const i=+ln.dataset.i;
+    if(cur.timings[i]!=null){ seek(cur.timings[i]); return; }
+  }
+  setPlaying(!playing);
+});
+stage.addEventListener('dblclick', ()=>{
+  if(!document.body.classList.contains('syncing')) $('#btnZen').click();
+});
+
+let pinch0=0, fs0=0;
+stage.addEventListener('touchstart',e=>{ if(e.touches.length===2){ pinch0=dist(e.touches); fs0=prefs.fs; } },{passive:true});
+stage.addEventListener('touchmove',e=>{ if(e.touches.length===2 && pinch0){ e.preventDefault(); setFs(fs0*dist(e.touches)/pinch0); } },{passive:false});
+stage.addEventListener('touchend',()=>{ pinch0=0; },{passive:true});
+function dist(t){ return Math.hypot(t[0].clientX-t[1].clientX, t[0].clientY-t[1].clientY); }
+
+document.addEventListener('keydown',e=>{
+  if(/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+  const k=e.key;
+  if(k===' '||k==='Enter'){ e.preventDefault(); document.body.classList.contains('syncing')? $('#syncTap').click() : setPlaying(!playing); }
+  else if(k==='ArrowUp'){ e.preventDefault(); prefs.speed=Math.min(160,prefs.speed+5); applyPrefs(); }
+  else if(k==='ArrowDown'){ e.preventDefault(); prefs.speed=Math.max(5,prefs.speed-5); applyPrefs(); }
+  else if(k==='ArrowRight'){ e.preventDefault(); (isKaraoke()||hasAudio())? seek(clock+5) : (stage.scrollTop+=stage.clientHeight*0.4); }
+  else if(k==='ArrowLeft'){ e.preventDefault(); $('#btnBack').click(); }
+  else if(k==='+'||k==='='){ setFs(prefs.fs+4); }
+  else if(k==='-'||k==='_'){ setFs(prefs.fs-4); }
+  else if(k.toLowerCase()==='f'){ $('#btnZen').click(); }
+});
+
+/* ============ arranque ============ */
+cur = live().find(s=>s.id===prefs.last) || live()[0] || null;
+applyPrefs(); render(); rafId=requestAnimationFrame(tick);
+
+/* service worker: la app queda disponible sin internet */
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  navigator.serviceWorker.register('atril-sw.js').catch(()=>{});
+}
+if(location.protocol==='file:'){
+  $('#gWarn').innerHTML='<b style="color:var(--danger)">Ojo:</b> abriste el archivo con <code>file://</code>. Google no permite login desde ahí — subilo a una URL (Vercel, Cloudflare Pages, GitHub Pages) o servilo por <code>http://localhost</code> para usar Drive.';
+}
+if(gcfg.clientId && tokenValid()){ dot('on'); gSync(false); }
+else if(gcfg.clientId){ gStat('Configurado. Tocá Conectar.'); }
+window.addEventListener('online', ()=>{ if(gcfg.clientId && gcfg.auto) gSync(false); });
+})();
+</script>
+</body>
+</html>

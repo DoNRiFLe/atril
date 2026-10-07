@@ -1,0 +1,13 @@
+.venv-alineador/
+__pycache__/
+*.pyc
+node_modules/
+
+# audios, letras y respaldos de trabajo: no van al repo
+temas/*
+!temas/LEEME.md
+*.mp3
+*.m4a
+*.wav
+*.lrc
+atril-respaldo.json
