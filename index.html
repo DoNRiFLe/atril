@@ -99,6 +99,7 @@
     padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom);
   }
   .sheet.open{display:flex}
+  #sheetPin{z-index:60}
   .sheet header{background:var(--bg)}
   .sheet .body{flex:1 1 auto; overflow:auto; padding:14px; display:flex; flex-direction:column; gap:12px}
   .row{display:flex; gap:8px; align-items:center; flex-wrap:wrap}
@@ -188,6 +189,7 @@
       <button class="btn" id="btnImport">Importar</button>
       <button class="btn" id="btnImportUrl">Importar de una URL</button>
       <button class="btn" id="btnExport">Exportar todo (.json)</button>
+      <button class="btn" id="btnExportPlano" style="display:none">Exportar sin cifrar</button>
     </div>
     <div class="status" id="impStatus"></div>
     <p class="hint">Importa <b>.json</b> (respaldo completo), <b>.lrc</b> (karaoke con tiempos) o <b>.txt</b> (letra suelta).</p>
@@ -285,6 +287,37 @@
       </div>
     </details>
     <p class="hint" id="gWarn"></p>
+
+    <hr>
+    <h3>Respaldo cifrado</h3>
+    <div class="row"><b style="flex:1" id="pinEstado">Sin PIN</b>
+      <button class="btn" id="btnPinSet">Poner PIN</button>
+      <button class="btn" id="btnPinOff">Quitar</button>
+    </div>
+    <div class="status" id="pinSt"></div>
+    <p class="hint">Con un PIN, el respaldo <b>.json</b> y la copia de Drive se guardan cifrados:
+    sin el PIN no se pueden leer. En el dispositivo las letras siguen a la vista, así que para
+    tocar no hace falta ponerlo. Un PIN de 4 números frena a un curioso; para algo más serio,
+    usá 8 o más. <b>Si te olvidás el PIN, los respaldos cifrados y la copia de Drive no se
+    pueden abrir más</b>: los temas siguen en cada dispositivo. Si lo cambiás o lo sacás, los otros
+    dispositivos se enteran cuando sincronizan con Drive.</p>
+    <p class="hint" id="pinWarn"></p>
+  </div>
+</div>
+
+<!-- PIN -->
+<div class="sheet" id="sheetPin">
+  <header>
+    <button class="btn ghost" id="pinCancel">✕</button>
+    <div class="title" id="pinTitle">PIN</div>
+    <button class="btn on" id="pinOk">Aceptar</button>
+  </header>
+  <div class="body">
+    <p class="hint" id="pinText"></p>
+    <input type="password" id="pin1" inputmode="numeric" autocomplete="off" placeholder="PIN">
+    <input type="password" id="pin2" inputmode="numeric" autocomplete="off" placeholder="Repetí el PIN">
+    <div class="status" id="pinMsg"></div>
+    <button class="btn ghost" id="pinForgot" style="align-self:flex-start;color:var(--dim)">No me acuerdo el PIN</button>
   </div>
 </div>
 
@@ -331,27 +364,37 @@ function saveG(){ try{ localStorage.setItem(LS_G, JSON.stringify(gcfg)); }catch(
 function uid(){ return 's'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
 function live(){ return data.songs.filter(s=>!s.deleted); }
 
-/* ============ IndexedDB para los audios ============ */
+/* ============ IndexedDB: audios y claves del PIN ============ */
 let idb=null;
 function db(){
   if(idb) return Promise.resolve(idb);
   return new Promise((res,rej)=>{
-    const r=indexedDB.open('atril',1);
-    r.onupgradeneeded=()=>{ r.result.createObjectStore('audio'); };
-    r.onsuccess=()=>{ idb=r.result; res(idb); };
+    const r=indexedDB.open('atril',2);
+    r.onupgradeneeded=()=>{
+      const d=r.result;
+      if(!d.objectStoreNames.contains('audio')) d.createObjectStore('audio');
+      if(!d.objectStoreNames.contains('claves')) d.createObjectStore('claves');
+    };
+    r.onsuccess=()=>{
+      idb=r.result;
+      // si otra pestaña trae una versión nueva, soltamos la base para no trabarla
+      idb.onversionchange=()=>{ idb.close(); idb=null; };
+      res(idb);
+    };
     r.onerror=()=>rej(r.error);
+    r.onblocked=()=>rej(new Error('hay otra pestaña del Atril abierta con la versión vieja: cerrala y recargá'));
   });
 }
-function idbPut(k,v){ return db().then(d=>new Promise((res,rej)=>{
-  const t=d.transaction('audio','readwrite'); t.objectStore('audio').put(v,k);
+function idbPut(k,v,st='audio'){ return db().then(d=>new Promise((res,rej)=>{
+  const t=d.transaction(st,'readwrite'); t.objectStore(st).put(v,k);
   t.oncomplete=res; t.onerror=()=>rej(t.error);
 })); }
-function idbGet(k){ return db().then(d=>new Promise((res,rej)=>{
-  const r=d.transaction('audio','readonly').objectStore('audio').get(k);
+function idbGet(k,st='audio'){ return db().then(d=>new Promise((res,rej)=>{
+  const r=d.transaction(st,'readonly').objectStore(st).get(k);
   r.onsuccess=()=>res(r.result||null); r.onerror=()=>rej(r.error);
 })); }
-function idbDel(k){ return db().then(d=>new Promise((res,rej)=>{
-  const t=d.transaction('audio','readwrite'); t.objectStore('audio').delete(k);
+function idbDel(k,st='audio'){ return db().then(d=>new Promise((res,rej)=>{
+  const t=d.transaction(st,'readwrite'); t.objectStore(st).delete(k);
   t.oncomplete=res; t.onerror=()=>rej(t.error);
 })); }
 
@@ -661,6 +704,153 @@ $('#btnDup').onclick=()=>{
 };
 $('#btnExportLrc').onclick=()=>{ if(editing) download(editing.title+'.lrc', toLrc(editing)); };
 
+/* ============ PIN: respaldo y Drive cifrados ============ */
+// Se cifra lo que sale del dispositivo: el .json exportado y atril.json en Drive.
+// Adentro las letras siguen en claro, así que para tocar no hace falta el PIN.
+// El PIN no se guarda: se guarda la clave AES que sale de él (no exportable) en
+// IndexedDB, por salt. Las viejas quedan, para poder abrir respaldos anteriores.
+const LS_PIN='atril.pin.v1', PIN_ITER=600000, OLVIDE={};
+const conCripto=!!(window.crypto && crypto.subtle);
+let pcfg=Object.assign({actual:null, iter:PIN_ITER, desde:0}, load(LS_PIN)||{});
+const claves=new Map();
+function savePin(){ try{ localStorage.setItem(LS_PIN, JSON.stringify(pcfg)); }catch(e){} }
+// un cambio hecho acá tiene que ganarle al que reemplaza, aunque ese venga de un reloj adelantado
+function desdeNuevo(){ return Math.max(now(), pcfg.desde+1); }
+function sinCripto(){ return new Error('en una dirección http:// el navegador no deja cifrar ni descifrar: entrá al Atril por https o desde localhost, o exportá el respaldo sin cifrar'); }
+
+function b64(buf){
+  // de a pedazos: con el array entero, String.fromCharCode revienta la pila
+  const u=new Uint8Array(buf); let s='';
+  for(let i=0;i<u.length;i+=0x8000) s+=String.fromCharCode.apply(null, u.subarray(i,i+0x8000));
+  return btoa(s);
+}
+function deB64(s){ const b=atob(s), u=new Uint8Array(b.length); for(let i=0;i<b.length;i++) u[i]=b.charCodeAt(i); return u; }
+
+async function derivar(pin, salt, iter){
+  const base=await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2', hash:'SHA-256', salt:deB64(salt), iterations:iter},
+    base, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']);
+}
+async function claveDe(salt){
+  if(!claves.has(salt)){ const k=await idbGet(salt,'claves').catch(()=>null); if(k) claves.set(salt,k); }
+  return claves.get(salt)||null;
+}
+async function guardarClave(salt, key){ await idbPut(salt, key, 'claves'); claves.set(salt, key); }
+
+function esCifrado(o){ return !!(o && typeof o==='object' && o.atril==='cifrado'); }
+async function cifrar(obj){
+  if(!conCripto) throw sinCripto();
+  const key=await claveDe(pcfg.actual);
+  if(!key) throw new Error('no encuentro la clave del PIN en este dispositivo: volvé a ponerlo en Ajustes');
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, new TextEncoder().encode(JSON.stringify(obj)));
+  return JSON.stringify({atril:'cifrado', v:1, salt:pcfg.actual, iter:pcfg.iter, desde:pcfg.desde, iv:b64(iv), datos:b64(ct)});
+}
+async function descifrar(env, key){
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM', iv:deB64(env.iv)}, key, deB64(env.datos));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+// Abre un sobre cifrado con alguna clave que ya conozca este dispositivo y, si ninguna
+// sirve, pide el PIN. Devuelve {datos, key}; null si no se pudo preguntar o se canceló;
+// OLVIDE si tocaron "No me acuerdo el PIN".
+async function abrirCifrado(env, o){
+  if(!conCripto) throw sinCripto();
+  // un archivo con iteraciones absurdas colgaría la pestaña derivando la clave
+  if(env.v!==1 || typeof env.salt!=='string' || typeof env.iv!=='string' || typeof env.datos!=='string'
+     || !Number.isInteger(env.iter) || env.iter<1e5 || env.iter>1e7)
+    throw new Error('el archivo cifrado tiene un formato que no conozco');
+  const k=await claveDe(env.salt);
+  if(k){
+    try{ return {datos:await descifrar(env,k), key:k}; }
+    catch(e){ throw new Error('el archivo cifrado está dañado'); }
+  }
+  if(!o.interactivo) return null;
+  let r=null;
+  const v=await pedirPin({titulo:o.titulo, texto:o.texto, olvide:o.olvide, probar:async pin=>{
+    const key=await derivar(pin, env.salt, env.iter);
+    try{ r={datos:await descifrar(env,key), key}; return null; }
+    catch(e){ return 'PIN incorrecto.'; }
+  }});
+  if(v===OLVIDE) return OLVIDE;
+  return v==null ? null : r;
+}
+
+let pinOpts=null, pinFin=null;
+function pinMsg(t, err){ $('#pinMsg').textContent=t; $('#pinMsg').className='status'+(err?' err':''); }
+function pedirPin(o){
+  if(pinFin) pinFin(null);
+  pinOpts=o;
+  $('#pinTitle').textContent=o.titulo||'PIN';
+  $('#pinText').textContent=o.texto||'';
+  $('#pin1').value=''; $('#pin2').value='';
+  $('#pin2').style.display=o.doble?'':'none';
+  $('#pinForgot').style.display=o.olvide?'':'none';
+  $('#pinOk').disabled=false; pinMsg('');
+  openS($('#sheetPin')); setTimeout(()=>$('#pin1').focus(), 60);
+  return new Promise(res=>{ pinFin=v=>{ pinFin=null; closeS($('#sheetPin')); res(v); }; });
+}
+$('#pinCancel').onclick=()=>{ if(pinFin) pinFin(null); };
+$('#pinForgot').onclick=()=>{ if(pinFin) pinFin(OLVIDE); };
+$('#pinOk').onclick=async ()=>{
+  const fin=pinFin;
+  if(!fin || $('#pinOk').disabled) return;
+  const pin=$('#pin1').value;
+  if(pin.length<4){ pinMsg('Tiene que tener 4 caracteres como mínimo.', true); return; }
+  if(pinOpts.doble && pin!==$('#pin2').value){ pinMsg('Los dos PIN no coinciden.', true); return; }
+  if(pinOpts.probar){
+    $('#pinOk').disabled=true; pinMsg('Probando…');
+    let err=null;
+    try{ err=await pinOpts.probar(pin); }catch(e){ err='No se pudo: '+e.message; }
+    $('#pinOk').disabled=false;
+    if(pinFin!==fin) return;   // cancelaron mientras derivaba
+    if(err){ pinMsg(err, true); $('#pin1').select(); return; }
+  }
+  fin(pin);
+};
+['#pin1','#pin2'].forEach(s=>$(s).addEventListener('keydown', e=>{
+  if(e.key==='Enter'){ e.preventDefault(); $('#pinOk').click(); }
+}));
+
+// Pone o cambia el PIN de este dispositivo. No pide el anterior: acá las letras ya están en claro.
+// pisaDesde: el desde de la copia que este PIN reemplaza, para ganarle sí o sí.
+async function ponerPin(texto, pisaDesde){
+  if(!conCripto){ alert('No se puede: '+sinCripto().message+'.'); return false; }
+  let salt=null;
+  const pin=await pedirPin({titulo:pcfg.actual?'Cambiar PIN':'Poner PIN', doble:true,
+    texto:texto||'Con este PIN se cifran el respaldo .json y la copia de Drive. Anotalo en algún lado: si te lo olvidás, lo cifrado no se recupera.',
+    probar:async p=>{
+      const s=b64(crypto.getRandomValues(new Uint8Array(16)));
+      await guardarClave(s, await derivar(p, s, PIN_ITER));
+      salt=s; return null;
+    }});
+  if(pin==null || !salt) return false;
+  pcfg={actual:salt, iter:PIN_ITER, desde:Math.max(desdeNuevo(), (pisaDesde||0)+1)}; savePin(); pinUI();
+  return true;
+}
+function pinUI(){
+  const on=!!pcfg.actual;
+  $('#pinEstado').textContent = on ? 'PIN puesto' : 'Sin PIN';
+  $('#btnPinSet').textContent = on ? 'Cambiar PIN' : 'Poner PIN';
+  $('#btnPinSet').disabled = !conCripto;
+  $('#btnPinOff').style.display = on ? '' : 'none';
+  $('#btnExport').textContent = on ? 'Exportar cifrado (.json)' : 'Exportar todo (.json)';
+  $('#btnExportPlano').style.display = on ? '' : 'none';
+  $('#pinWarn').innerHTML = conCripto ? '' :
+    '<b style="color:var(--danger)">Ojo:</b> abriste el Atril por <code>http://</code> y en esa dirección el navegador no deja cifrar. Para usar el PIN, entrá por https o desde <code>localhost</code>.';
+}
+function pinAviso(msg){
+  $('#pinSt').className='status ok'; $('#pinSt').textContent=msg;
+  if(gcfg.clientId && tokenValid()) gSync(true);
+}
+$('#btnPinSet').onclick=async ()=>{
+  if(await ponerPin()) pinAviso('Listo: el respaldo y la copia de Drive van cifrados con el PIN.');
+};
+$('#btnPinOff').onclick=()=>{
+  if(!confirm('¿Sacar el PIN?\n\nLos próximos respaldos y la copia de Drive van a quedar sin cifrar, y los otros dispositivos lo sacan también cuando sincronicen.')) return;
+  pcfg={actual:null, iter:PIN_ITER, desde:desdeNuevo()}; savePin(); pinUI();
+  pinAviso('PIN sacado: el respaldo y la copia de Drive van sin cifrar.');
+};
+
 /* ============ import / export ============ */
 function download(name, text){
   const a=document.createElement('a');
@@ -668,17 +858,41 @@ function download(name, text){
   a.download=name.replace(/[\\/:*?"<>|]/g,'_'); a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href),4000);
 }
-$('#btnExport').onclick=()=>download('atril-respaldo.json', JSON.stringify(data,null,1));
+async function exportar(cifrado){
+  const st=$('#impStatus');
+  try{
+    download('atril-respaldo.json', cifrado ? await cifrar(data) : JSON.stringify(data,null,1));
+    st.className='status ok';
+    st.textContent = cifrado ? 'Respaldo cifrado con tu PIN.' : (pcfg.actual ? 'Respaldo sin cifrar: cuidá dónde lo dejás.' : '');
+  }catch(e){ st.className='status err'; st.textContent='No se pudo exportar: '+e.message+'.'; }
+}
+$('#btnExport').onclick=()=>exportar(!!pcfg.actual);
+$('#btnExportPlano').onclick=()=>{
+  if(confirm('Ese archivo lo va a poder leer cualquiera que lo tenga. ¿Exportar sin cifrar?')) exportar(false);
+};
 $('#btnImportUrl').onclick=async ()=>{
   const st=$('#impStatus');
   const guess = location.protocol.startsWith('http') ? (location.origin+'/atril-respaldo.json') : '';
   const url = prompt('URL del respaldo .json\n\nSi lo estás sirviendo desde la PC con tools/servir.js,\nponé el archivo en public/ y usá la dirección de esa PC.', guess);
   if(!url) return;
   st.className='status'; st.textContent='Bajando…';
+  let o;
   try{
     const r = await fetch(url, {cache:'no-store'});
     if(!r.ok) throw new Error('HTTP '+r.status);
-    const o = await r.json();
+    o = await r.json();
+  }catch(e){
+    st.className='status err';
+    st.textContent='No se pudo: '+e.message+'. Revisá la URL y que ambos estén en la misma red.';
+    return;
+  }
+  try{
+    if(esCifrado(o)){
+      const x=await abrirCifrado(o, {interactivo:true, titulo:'Respaldo cifrado',
+        texto:'Ese respaldo está cifrado. Poné el PIN con el que se exportó.'});
+      if(!x){ st.className='status'; st.textContent='Cancelado.'; return; }
+      o=x.datos;
+    }
     const n = mergeData(Array.isArray(o) ? {songs:o} : o);
     if(!n){ st.className='status'; st.textContent='Sin novedades: ya tenías todo.'; return; }
     saveData(true);
@@ -686,8 +900,7 @@ $('#btnImportUrl').onclick=async ()=>{
     render(); renderList();
     st.className='status ok'; st.textContent=n+' temas importados.';
   }catch(e){
-    st.className='status err';
-    st.textContent='No se pudo: '+e.message+'. Revisá la URL y que ambos estén en la misma red.';
+    st.className='status err'; st.textContent='No se pudo: '+e.message+'.';
   }
 };
 $('#btnImport').onclick=()=>$('#fileIn').click();
@@ -696,7 +909,14 @@ $('#fileIn').onchange=async e=>{
     const txt=await f.text();
     if(/\.json$/i.test(f.name)){
       try{
-        const o=JSON.parse(txt), list=Array.isArray(o)?o:(o.songs||[]); let n=0;
+        let o=JSON.parse(txt);
+        if(esCifrado(o)){
+          const x=await abrirCifrado(o, {interactivo:true, titulo:'Respaldo cifrado',
+            texto:'"'+f.name+'" está cifrado. Poné el PIN con el que se exportó.'});
+          if(!x) continue;
+          o=x.datos;
+        }
+        const list=Array.isArray(o)?o:(o.songs||[]); let n=0;
         for(const s of list){
           if(!s || !Array.isArray(s.lines) || s.deleted) continue;
           data.songs.push({id:uid(), title:s.title||'Sin título', artist:s.artist||'', lines:s.lines,
@@ -704,7 +924,10 @@ $('#fileIn').onchange=async e=>{
           n++;
         }
         toast('Importados '+n+' temas.');
-      }catch(err){ toast('JSON inválido: '+f.name, true); }
+      }catch(err){
+        const msg = err instanceof SyntaxError ? 'JSON inválido: '+f.name : f.name+': '+err.message+'.';
+        toast(msg, true); $('#impStatus').className='status err'; $('#impStatus').textContent=msg;
+      }
     } else {
       const p=parseLyrics(txt);
       data.songs.push({id:uid(), title:f.name.replace(/\.(lrc|txt)$/i,''), artist:'', lines:p.lines,
@@ -798,6 +1021,26 @@ function mergeData(remote){
   data.songs=data.songs.filter(s=>!(s.deleted && (s.updatedAt||0)<lim));
   return changed;
 }
+/* PIN de la copia de Drive: como con los temas, gana el que se cambió último (desde).
+   Devuelve los datos en claro; null si hace falta un PIN que no se pudo pedir; OLVIDE. */
+async function leerRemoto(remote, interactivo){
+  const cifrada=esCifrado(remote);
+  const suDesde=(cifrada ? remote.desde : remote.pinDesde) || 0;
+  const manda=suDesde > pcfg.desde;
+  if(!cifrada){
+    if(manda){ pcfg={actual:null, iter:PIN_ITER, desde:suDesde}; savePin(); pinUI(); }
+    return remote;
+  }
+  const r=await abrirCifrado(remote, {interactivo, olvide:true, titulo:'PIN de Drive',
+    texto: manda ? 'Desde otro dispositivo le pusieron un PIN nuevo a la copia de Drive. Ponelo para seguir sincronizando.'
+                 : 'La copia de Drive está cifrada con otro PIN. Ponelo para leerla; después se guarda con el PIN de este dispositivo.'});
+  if(!r || r===OLVIDE) return r;
+  if(manda){
+    await guardarClave(remote.salt, r.key);
+    pcfg={actual:remote.salt, iter:remote.iter, desde:suDesde}; savePin(); pinUI();
+  }
+  return r.datos;
+}
 async function gSync(interactive){
   if(syncing) return;
   if(!gcfg.clientId){ gStat('Falta el Client ID.','err'); return; }
@@ -805,15 +1048,32 @@ async function gSync(interactive){
   syncing=true; dot('busy'); gStat('Sincronizando…');
   try{
     let f = gcfg.fileId ? {id:gcfg.fileId} : await gFind('atril.json');
-    let changed=0;
+    let changed=0, remote=null;
     if(f){
       gcfg.fileId=f.id;
-      try{
-        const remote=JSON.parse(await (await gDownload(f.id)).text());
-        changed=mergeData(remote);
-      }catch(e){ if(!/404/.test(e.message)) throw e; gcfg.fileId=''; f=null; }
+      try{ remote=JSON.parse(await (await gDownload(f.id)).text()); }
+      catch(e){ if(!/404/.test(e.message)) throw e; gcfg.fileId=''; f=null; }
     }
-    const payload=new Blob([JSON.stringify(data)],{type:'application/json'});
+    if(remote){
+      const suDesde=(esCifrado(remote) && remote.desde) || 0;
+      remote=await leerRemoto(remote, !!interactive);
+      if(remote===null){
+        // sin el PIN no se mezcla ni se sube nada: pisaríamos la copia buena
+        dot('err');
+        gStat(interactive ? 'Sincronización cancelada: sin el PIN no se puede leer la copia de Drive.'
+                          : 'La copia de Drive tiene otro PIN: tocá Sincronizar ahora para ponerlo.','err');
+        return;
+      }
+      if(remote===OLVIDE){
+        const ok = confirm('Sin el PIN, la copia de Drive no se puede abrir.\n\n¿La reemplazo con los temas de este dispositivo? Lo que esté sólo en Drive se pierde; los otros dispositivos vuelven a subir lo suyo cuando sincronicen con el PIN nuevo.')
+          && await ponerPin('Poné un PIN nuevo para la copia de Drive. Los otros dispositivos te lo van a pedir la próxima vez que sincronicen.', suDesde);
+        if(!ok){ dot('err'); gStat('Sincronización cancelada.','err'); return; }
+      }
+      else changed=mergeData(remote);
+    }
+    // con PIN puesto, cifrar() falla antes que subir algo en claro
+    const txt = pcfg.actual ? await cifrar(data) : JSON.stringify(Object.assign({pinDesde:pcfg.desde}, data));
+    const payload=new Blob([txt],{type:'application/json'});
     gcfg.fileId = await gUpload('atril.json', payload, 'application/json', gcfg.fileId||null);
     gcfg.lastSync=now(); saveG();
     try{ localStorage.setItem(LS_DATA, JSON.stringify(data)); }catch(e){}
@@ -985,7 +1245,7 @@ document.addEventListener('keydown',e=>{
 
 /* ============ arranque ============ */
 cur = live().find(s=>s.id===prefs.last) || live()[0] || null;
-applyPrefs(); render(); rafId=requestAnimationFrame(tick);
+applyPrefs(); pinUI(); render(); rafId=requestAnimationFrame(tick);
 
 /* service worker: la app queda disponible sin internet */
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){

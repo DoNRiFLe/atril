@@ -37,6 +37,10 @@ workflow `.github/workflows/pages.yml`. Push a `main` = publicado en ~2 minutos.
 - **Drive**: `localStorage`, `atril.gdrive.v1`. Scope `drive.appdata`, o sea
   una carpeta privada que sólo ve esta app. El Client ID lo pone el usuario
   desde la interfaz: **nunca hardcodear credenciales**.
+- **PIN del respaldo**: `localStorage`, `atril.pin.v1` (salt vigente,
+  iteraciones y `desde`). Las claves AES que salen del PIN, no exportables, en
+  IndexedDB `atril` (versión 2), store `claves`, por salt; las viejas quedan
+  para abrir respaldos anteriores. **El PIN no se guarda.**
 
 ### El reloj del karaoke
 
@@ -60,6 +64,13 @@ Merge por tema según `updatedAt`, no reemplazo del archivo entero. Los borrados
 van con tombstone (`deleted: true`) para que se propaguen en vez de resucitar
 en el próximo merge. Toda escritura que deba sincronizarse tiene que tocar
 `updatedAt` del tema y llamar a `saveData(true)`.
+
+Con PIN puesto, `atril.json` y el `.json` exportado van cifrados (PBKDF2 +
+AES-GCM, sobre `{atril:'cifrado', v:1, salt, iter, desde, iv, datos}`); en el
+dispositivo todo sigue en claro. Entre dispositivos gana el PIN cambiado
+último (`desde`, o `pinDesde` en la copia sin cifrar). Las sincronizaciones
+automáticas nunca piden el PIN: si hace falta, abortan sin subir nada. **Con PIN
+puesto nunca se sube ni se exporta en claro** salvo con *Exportar sin cifrar*.
 
 ## Errores ya cometidos, para no repetirlos
 
