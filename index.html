@@ -63,7 +63,10 @@
   .ln.blank{min-height:.6em; opacity:0}
   .ln.done{opacity:.3}
   .ln.cur{opacity:1; color:var(--accent)}
+  .ln.next{opacity:.85}
   body.plain .ln{opacity:1}
+  .sigue{margin:1.4em 0 0; font-size:.42em; font-weight:600; color:var(--dim); cursor:pointer}
+  .sigue b{color:var(--fg)}
   body.plain .ln.cur{color:var(--accent)}
   #empty{padding:20vh 8vw; text-align:center; color:var(--dim); font-size:18px; line-height:1.6}
 
@@ -111,6 +114,11 @@
   .song .meta b{display:block; font-size:17px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .song .meta span{font-size:13px; color:var(--dim)}
   .tag{font-size:11px; border:1px solid var(--accent); color:var(--accent); border-radius:6px; padding:2px 5px}
+  .tabs .btn{flex:1 1 0; justify-content:center}
+  .song.actual{border-color:var(--accent)}
+  .song .handle{touch-action:none; cursor:grab; user-select:none; color:var(--dim); font-size:24px; line-height:1; padding:8px 6px; margin:-8px 0 -8px -4px}
+  .song .num{min-width:1.4em; text-align:right; color:var(--dim); font-variant-numeric:tabular-nums}
+  .song.drag{opacity:.8; border-color:var(--accent); box-shadow:0 6px 20px rgba(0,0,0,.35)}
   input[type=text], input[type=password], textarea{
     width:100%; background:var(--panel); color:var(--fg); border:1px solid var(--line);
     border-radius:10px; padding:12px; font:inherit; font-size:16px;
@@ -183,8 +191,13 @@
     <button class="btn" id="btnNew">+ Nuevo</button>
   </header>
   <div class="body">
+    <div class="row tabs">
+      <button class="btn" data-tab="show">Lista del show <span id="showCount"></span></button>
+      <button class="btn" data-tab="todos">Todos los temas</button>
+    </div>
     <input type="text" id="search" placeholder="Buscar…" autocomplete="off">
     <div id="songs" style="display:flex;flex-direction:column;gap:8px"></div>
+    <div class="row" id="showTools"><button class="btn" id="btnShowClear">Vaciar la lista</button></div>
     <div class="row" style="margin-top:8px">
       <button class="btn" id="btnImport">Importar</button>
       <button class="btn" id="btnImportUrl">Importar de una URL</button>
@@ -245,6 +258,7 @@
     </div>
     <div class="row"><b style="flex:1">Atenuar líneas inactivas</b><button class="btn" id="btnDim">—</button></div>
     <div class="row"><b style="flex:1">Pantalla siempre encendida</b><button class="btn" id="btnWake">—</button></div>
+    <div><b>Sin internet</b><div class="status" id="offInfo"></div></div>
 
     <hr>
     <h3>Karaoke</h3>
@@ -257,6 +271,19 @@
     <button class="btn wide" id="btnSync">🎤 Sincronizar tap a tap</button>
     <button class="btn wide" id="btnClearTimings">Borrar tiempos de este tema</button>
     <p class="hint">Si el tema tiene audio cargado, la sincronización corre contra el audio real: los tiempos quedan exactos y sirven en cualquier dispositivo.</p>
+
+    <hr>
+    <h3>Control o pedal Bluetooth</h3>
+    <div class="row"><b style="flex:1">Botón para pasar de tema</b>
+      <button class="btn" id="btnLearn">Aprender</button>
+      <button class="btn" id="btnLearnOff">Olvidar</button>
+    </div>
+    <div class="status" id="ctlStatus"></div>
+    <p class="hint">Los pedales pasa-páginas andan sin configurar nada: <b>Avanzar página</b> pasa al
+    tema siguiente y <b>Retroceder página</b> vuelve al anterior (sincronizando, marcan y deshacen).
+    Para otro control, tocá <b>Aprender</b> y apretá su botón. Los controles de selfie, como el del
+    trípode Xiaomi, mandan <i>subir volumen</i>, y Android casi siempre se queda con esa tecla: si al
+    aprender no aparece nada, es eso.</p>
 
     <hr>
     <h3>Google Drive</h3>
@@ -339,10 +366,10 @@ const DEMO = {version:2, songs:[{
   id:'demo', title:'Cómo usar el atril', artist:'Leeme primero',
   lines:['Pegá tus letras desde el menú ☰','','Tocá A+ o A− para el tamaño','o pellizcá con dos dedos','','Con ▶ la letra baja sola','','Si cargás el audio del tema','el karaoke queda clavado al segundo','','Ajustes ⚙ → Sincronizar','y tocás una vez por línea','','Se guarda en la tablet y en tu Drive.'],
   timings:null, audioName:null, updatedAt:0
-}], updatedAt:0};
+}], show:{ids:[], updatedAt:0}, updatedAt:0};
 
 let data = migrate(load(LS_DATA)) || DEMO;
-let prefs = Object.assign({fs:44, speed:45, theme:'dark', dim:true, wake:true, lead:0.3, last:null}, load(LS_PREFS)||{});
+let prefs = Object.assign({fs:44, speed:45, theme:'dark', dim:true, wake:true, lead:0.3, last:null, tab:null, ctl:null}, load(LS_PREFS)||{});
 let gcfg  = Object.assign({clientId:'', token:'', exp:0, auto:true, audio:true, fileId:'', lastSync:0}, load(LS_G)||{});
 let cur = null;
 
@@ -351,6 +378,7 @@ function migrate(d){
   if(!d) { const old=load('atril.data.v1'); if(old) d=old; else return null; }
   d.version=2; d.updatedAt=d.updatedAt||0;
   d.songs=(d.songs||[]).map(s=>Object.assign({audioName:null, yt:null, updatedAt:0, deleted:false}, s));
+  if(!d.show || !Array.isArray(d.show.ids)) d.show={ids:[], updatedAt:0};
   return d;
 }
 function saveData(touch){
@@ -443,16 +471,19 @@ let yt=null, ytListo=false, ytId=null;
 
 function render(){
   $('#hTitle').textContent = cur ? cur.title : 'Sin temas';
-  $('#hArtist').textContent = cur ? (cur.artist||'') : '';
-  lyrics.innerHTML=''; lineEls=[]; active=-1;
+  $('#hArtist').textContent = '';
+  lyrics.innerHTML=''; lineEls=[];
+  active=-2;  // distinto de -1, para que highlight(-1) marque igual la primera línea como la que viene
   if(!cur){ empty.style.display='block'; empty.innerHTML='No hay temas cargados.<br>Tocá ☰ → <b>+ Nuevo</b>.'; loadAudio(); return; }
   empty.style.display='none';
+  atenuar();
   cur.lines.forEach((txt,i)=>{
     const p=document.createElement('p');
     p.className='ln'+(txt.trim()?'':' blank');
     p.textContent=txt||' '; p.dataset.i=i;
     lyrics.appendChild(p); lineEls.push(p);
   });
+  pintarShow(); ajustarFs();
   stage.scrollTop=0; clock=0; updateClock(); highlight(-1);
   loadAudio();
 }
@@ -462,13 +493,50 @@ function esYt(){ return !audioURL && hayYt(); }
 function highlight(i){
   if(i===active) return;
   if(lineEls[active]) lineEls[active].classList.remove('cur');
-  for(let k=0;k<lineEls.length;k++) lineEls[k].classList.toggle('done', k<i);
+  const j=sigLinea(i);
+  for(let k=0;k<lineEls.length;k++){ lineEls[k].classList.toggle('done', k<i); lineEls[k].classList.toggle('next', k===j); }
   active=i;
-  if(lineEls[i]){
-    lineEls[i].classList.add('cur');
-    const r=lineEls[i].offsetTop - stage.clientHeight*0.42 + lineEls[i].offsetHeight/2;
-    stage.scrollTo({top:r, behavior:'smooth'});
+  if(lineEls[i]){ lineEls[i].classList.add('cur'); centrar(true); }
+}
+// la actual arriba, para que debajo entre entera la que viene
+function centrar(suave){
+  const el=lineEls[active]; if(!el) return;
+  stage.scrollTo({top:el.offsetTop - stage.clientHeight*0.22, behavior:suave?'smooth':'auto'});
+}
+function sigLinea(i){
+  if(!cur) return -1;
+  for(let k=i+1;k<cur.lines.length;k++) if(cur.lines[k].trim()) return k;
+  return -1;
+}
+// atenuar sólo tiene sentido cuando hay una línea actual: con el autoscroll se lee todo parejo
+function atenuar(){
+  document.body.classList.toggle('plain', !prefs.dim || !(isKaraoke() || document.body.classList.contains('syncing')));
+}
+
+/* ============ tamaño de letra: siempre entran la línea actual y la que viene ============ */
+let fsEf=44;
+function ajustarFs(){
+  const css=document.documentElement.style, alto=stage.clientHeight*0.72;
+  const entra=fs=>{ css.setProperty('--fs', fs+'px'); return !(alto>0) || parMasAlto()<=alto; };
+  let fs=prefs.fs;
+  if(!entra(fs)){
+    // el alto crece más rápido que la letra (más grande, más renglones partidos): búsqueda binaria
+    let lo=20, hi=fs-1;
+    while(lo<hi){ const m=Math.ceil((lo+hi)/2); if(entra(m)) lo=m; else hi=m-1; }
+    fs=lo; css.setProperty('--fs', fs+'px');
   }
+  fsEf=fs;
+  $('#fsVal').textContent = fs<prefs.fs ? (fs+'px · tope para ver 2 líneas') : (fs+'px');
+}
+// lo más alto que ocupan juntas una línea y la siguiente, con los renglones vacíos del medio
+function parMasAlto(){
+  let peor=0;
+  for(let i=0;i<lineEls.length;i++){
+    if(!cur.lines[i].trim()) continue;
+    const a=lineEls[i], b=lineEls[sigLinea(i)]||a;
+    peor=Math.max(peor, b.offsetTop+b.offsetHeight-a.offsetTop);
+  }
+  return peor;
 }
 
 /* ============ YouTube ============ */
@@ -610,10 +678,10 @@ document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==
 
 /* ============ prefs ============ */
 function applyPrefs(){
-  document.documentElement.style.setProperty('--fs', prefs.fs+'px');
+  ajustarFs();
   document.documentElement.dataset.theme = prefs.theme;
-  document.body.classList.toggle('plain', !prefs.dim);
-  $('#speed').value=prefs.speed; $('#fsRange').value=prefs.fs; $('#fsVal').textContent=prefs.fs+'px';
+  atenuar();
+  $('#speed').value=prefs.speed; $('#fsRange').value=prefs.fs;
   $('#leadRange').value=Math.round(prefs.lead*100); $('#leadVal').textContent=prefs.lead.toFixed(2)+'s';
   $('#btnDim').textContent = prefs.dim?'Sí':'No'; $('#btnDim').classList.toggle('on',prefs.dim);
   $('#btnWake').textContent = prefs.wake?'Sí':'No'; $('#btnWake').classList.toggle('on',prefs.wake);
@@ -621,32 +689,104 @@ function applyPrefs(){
   $('#btnGAudio').textContent = gcfg.audio?'Sí':'No'; $('#btnGAudio').classList.toggle('on',gcfg.audio);
   savePrefs();
 }
-function setFs(v){ prefs.fs=Math.max(20,Math.min(140,Math.round(v))); applyPrefs(); }
+function setFs(v){ prefs.fs=Math.max(20,Math.min(140,Math.round(v))); applyPrefs(); centrar(false); }
 
 /* ============ lista ============ */
 function renderList(){
-  const q=$('#search').value.trim().toLowerCase();
+  const S=showList(), tab=prefs.tab || (S.length?'show':'todos');
+  prefs.tab=tab;  // queda fija: agregar el primer tema no te cambia de pestaña
+  document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('on', b.dataset.tab===tab));
+  $('#showCount').textContent = S.length ? '('+S.length+')' : '';
+  $('#search').style.display = tab==='show' ? 'none' : '';
+  $('#showTools').style.display = tab==='show' && S.length ? '' : 'none';
   const box=$('#songs'); box.innerHTML='';
+  if(tab==='show'){
+    S.forEach((s,i)=>box.appendChild(filaTema(s, i+1)));
+    if(!S.length) box.innerHTML='<p class="hint">La lista del show está vacía. En <b>Todos los temas</b>, tocá <b>+</b> en cada uno, en el orden en que los van a tocar. Después los acomodás arrastrando desde <b>≡</b>.</p>';
+    return;
+  }
+  const q=$('#search').value.trim().toLowerCase();
   live()
     .filter(s=>!q || (s.title+' '+(s.artist||'')+' '+s.lines.join(' ')).toLowerCase().includes(q))
-    .forEach(s=>{
-      const d=document.createElement('div'); d.className='song';
-      const m=document.createElement('div'); m.className='meta';
-      m.innerHTML='<b></b><span></span>';
-      m.querySelector('b').textContent=s.title;
-      m.querySelector('span').textContent=(s.artist||'—')+' · '+s.lines.filter(l=>l.trim()).length+' líneas';
-      d.appendChild(m);
-      if(s.timings){ const t=document.createElement('span'); t.className='tag'; t.textContent='🎤'; d.appendChild(t); }
-      if(s.audioName){ const t=document.createElement('span'); t.className='tag'; t.textContent='🎵'; d.appendChild(t); }
-      if(s.yt){ const t=document.createElement('span'); t.className='tag'; t.textContent='YT'; d.appendChild(t); }
-      const e=document.createElement('button'); e.className='btn ghost'; e.textContent='✎';
-      e.onclick=ev=>{ ev.stopPropagation(); openEdit(s); };
-      d.appendChild(e);
-      m.onclick=()=>{ cur=s; render(); savePrefs(); closeS($('#sheetList')); };
-      box.appendChild(d);
-    });
+    .forEach(s=>box.appendChild(filaTema(s, 0)));
   if(!box.children.length) box.innerHTML='<p class="hint">Nada por acá.</p>';
 }
+// n: el número en la lista del show, o 0 en la de todos los temas
+function filaTema(s, n){
+  const d=document.createElement('div'); d.className='song'+(s===cur?' actual':''); d.dataset.id=s.id;
+  const boton=(txt, titulo, clase, fn)=>{
+    const b=document.createElement('button'); b.className=clase; b.textContent=txt; b.title=titulo;
+    b.onclick=ev=>{ ev.stopPropagation(); fn(); }; return b;
+  };
+  if(n){
+    const h=document.createElement('span'); h.className='handle'; h.textContent='≡'; h.title='Arrastrá para cambiar el orden';
+    h.onpointerdown=ev=>arrastrar(ev, d);
+    const nro=document.createElement('span'); nro.className='num'; nro.textContent=n;
+    d.append(h, nro);
+  }
+  const m=document.createElement('div'); m.className='meta';
+  m.innerHTML='<b></b><span></span>';
+  m.querySelector('b').textContent=s.title;
+  m.querySelector('span').textContent=(s.artist||'—')+' · '+s.lines.filter(l=>l.trim()).length+' líneas';
+  d.appendChild(m);
+  if(s.timings){ const t=document.createElement('span'); t.className='tag'; t.textContent='🎤'; d.appendChild(t); }
+  if(s.audioName){ const t=document.createElement('span'); t.className='tag'; t.textContent='🎵'; d.appendChild(t); }
+  if(s.yt){ const t=document.createElement('span'); t.className='tag'; t.textContent='YT'; d.appendChild(t); }
+  const enShow=data.show.ids.includes(s.id), sacar=()=>{ setShow(data.show.ids.filter(id=>id!==s.id)); renderList(); };
+  if(n) d.appendChild(boton('−', 'Sacar de la lista del show', 'btn ghost', sacar));
+  else if(enShow) d.appendChild(boton('✓', 'Está en la lista del show: tocá para sacarlo', 'btn on', sacar));
+  else d.appendChild(boton('+', 'Agregar al final de la lista del show', 'btn', ()=>{ setShow(data.show.ids.concat(s.id)); renderList(); }));
+  d.appendChild(boton('✎', 'Editar', 'btn ghost', ()=>openEdit(s)));
+  m.onclick=()=>{ cur=s; render(); savePrefs(); closeS($('#sheetList')); };
+  return d;
+}
+// arrastrar desde ≡ para reordenar el show, con el dedo o con el mouse
+function arrastrar(ev, fila){
+  ev.preventDefault();
+  const box=fila.parentNode, panel=box.closest('.body');
+  fila.classList.add('drag');
+  // se escucha en la ventana y no con setPointerCapture: al mover la fila en el DOM el capture se suelta
+  const mover=e=>{
+    if(e.pointerId!==ev.pointerId) return;
+    const y=e.clientY, r=panel.getBoundingClientRect();
+    if(y<r.top+50) panel.scrollTop-=12; else if(y>r.bottom-50) panel.scrollTop+=12;
+    const antes=[...box.children].find(c=>c!==fila && y < c.getBoundingClientRect().top + c.offsetHeight/2);
+    if(antes){ if(fila.nextSibling!==antes) box.insertBefore(fila, antes); }
+    else if(box.lastChild!==fila) box.appendChild(fila);
+  };
+  const soltar=e=>{
+    if(e.pointerId!==ev.pointerId) return;
+    removeEventListener('pointermove', mover); removeEventListener('pointerup', soltar); removeEventListener('pointercancel', soltar);
+    fila.classList.remove('drag');
+    const ids=[...box.children].map(c=>c.dataset.id);
+    if(ids.join()!==showList().map(s=>s.id).join()) setShow(ids);
+    renderList();
+  };
+  addEventListener('pointermove', mover); addEventListener('pointerup', soltar); addEventListener('pointercancel', soltar);
+}
+
+/* ============ lista del show ============ */
+// data.show.ids es el orden del show. Viaja entero en el respaldo y en Drive: gana el updatedAt más nuevo.
+function showList(){ const m={}; live().forEach(s=>m[s.id]=s); return data.show.ids.map(id=>m[id]).filter(Boolean); }
+function setShow(ids){ data.show={ids, updatedAt:now()}; saveData(true); pintarShow(); }
+// ⏮ ⏭ siguen la lista del show si el tema actual está en ella; si no, todos los temas
+function orden(){ const S=showList(); return cur && S.includes(cur) ? S : live(); }
+function siguienteDelShow(){ const S=showList(), i=S.indexOf(cur); return i>=0 && i<S.length-1 ? S[i+1] : null; }
+// el lugar en el show arriba, y al final de la letra cuál viene
+function pintarShow(){
+  if(!cur) return;
+  const S=showList(), i=S.indexOf(cur);
+  $('#hArtist').textContent=[cur.artist, i>=0 ? ('show '+(i+1)+'/'+S.length) : ''].filter(Boolean).join(' · ');
+  let p=lyrics.querySelector('.sigue'); const sig=siguienteDelShow();
+  if(!sig){ if(p) p.remove(); return; }
+  if(!p){ p=document.createElement('p'); p.className='sigue'; p.innerHTML='Sigue: <b></b>'; lyrics.appendChild(p); }
+  p.querySelector('b').textContent=sig.title;
+}
+document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{ prefs.tab=b.dataset.tab; savePrefs(); renderList(); });
+$('#btnShowClear').onclick=()=>{
+  if(!confirm('¿Vaciar la lista del show? Los temas no se borran.')) return;
+  setShow([]); renderList();
+};
 function openS(el){ el.classList.add('open'); }
 function closeS(el){ el.classList.remove('open'); }
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeS(b.closest('.sheet')));
@@ -1016,6 +1156,10 @@ function mergeData(remote){
     if(!ls){ data.songs.push(Object.assign({audioName:null,deleted:false,updatedAt:0}, rs)); changed++; }
     else if((rs.updatedAt||0) > (ls.updatedAt||0)){ Object.assign(ls, rs); changed++; }
   }
+  // la lista del show va entera: gana la más nueva
+  if(remote.show && Array.isArray(remote.show.ids) && (remote.show.updatedAt||0) > (data.show.updatedAt||0)){
+    data.show={ids:remote.show.ids.slice(), updatedAt:remote.show.updatedAt}; changed++;
+  }
   // limpiar tombstones viejos (60 días)
   const lim=now()-60*86400000;
   data.songs=data.songs.filter(s=>!(s.deleted && (s.updatedAt||0)<lim));
@@ -1121,12 +1265,12 @@ $('#btnSync').onclick=()=>{
   if(!cur) return;
   closeS($('#sheetCfg'));
   syncMarks=[]; syncIdx=0; clock=0; setPlaying(false); seek(0);
-  updateClock(); document.body.classList.add('syncing');
+  updateClock(); document.body.classList.add('syncing'); atenuar();
   highlight(-1); stage.scrollTo({top:0,behavior:'smooth'});
   $('#syncTap').textContent = hasAudio()? '▶ ARRANCAR EL AUDIO' : '▶ ARRANCAR';
 };
 function syncStop(){
-  document.body.classList.remove('syncing');
+  document.body.classList.remove('syncing'); atenuar();
   playing=false;
   if(esYt()){ try{ yt.pauseVideo(); }catch(e){} } else if(audioURL) player.pause();
   $('#btnPlay').textContent='▶'; $('#btnPlay').classList.remove('on');
@@ -1183,12 +1327,13 @@ $('#btnClearTimings').onclick=()=>{
 
 /* ============ controles ============ */
 $('#btnPlay').onclick=()=>setPlaying(!playing);
-$('#btnPlus').onclick=()=>setFs(prefs.fs+4);
-$('#btnMinus').onclick=()=>setFs(prefs.fs-4);
+// desde el tamaño que se ve, no desde el pedido: si está en el tope, A− achica al primer toque
+$('#btnPlus').onclick=()=>setFs(fsEf+4);
+$('#btnMinus').onclick=()=>setFs(fsEf-4);
 $('#btnBack').onclick=()=>{ if(isKaraoke()||hasAudio()) seek(clock-5); else stage.scrollTop-=stage.clientHeight*0.4; };
 $('#btnReset').onclick=resetAll;
 $('#btnList').onclick=()=>{ renderList(); openS($('#sheetList')); };
-$('#btnCfg').onclick=()=>{ applyPrefs(); $('#gClientId').value=gcfg.clientId; openS($('#sheetCfg')); };
+$('#btnCfg').onclick=()=>{ applyPrefs(); $('#gClientId').value=gcfg.clientId; ctlInfo(); offInfo(); openS($('#sheetCfg')); };
 $('#search').oninput=renderList;
 $('#speed').oninput=e=>{ prefs.speed=+e.target.value; savePrefs(); };
 $('#fsRange').oninput=e=>setFs(+e.target.value);
@@ -1197,7 +1342,7 @@ $('#btnDim').onclick=()=>{ prefs.dim=!prefs.dim; applyPrefs(); };
 $('#btnWake').onclick=()=>{ prefs.wake=!prefs.wake; if(!prefs.wake) wakeOff(); else if(playing) wakeOn(); applyPrefs(); };
 document.querySelectorAll('[data-theme-set]').forEach(b=>b.onclick=()=>{ prefs.theme=b.dataset.themeSet; applyPrefs(); });
 function step(d){
-  const L=live(); if(!L.length) return;
+  const L=orden(); if(!L.length) return;
   let i=L.indexOf(cur); i=(i+d+L.length)%L.length;
   cur=L[i]; render(); savePrefs();
 }
@@ -1213,6 +1358,7 @@ $('#btnZen').onclick=()=>{
 
 stage.addEventListener('click', e=>{
   if(document.body.classList.contains('syncing')) return;
+  if(e.target.closest('.sigue')){ step(1); return; }
   const ln=e.target.closest('.ln');
   if(ln && isKaraoke()){
     const i=+ln.dataset.i;
@@ -1225,27 +1371,88 @@ stage.addEventListener('dblclick', ()=>{
 });
 
 let pinch0=0, fs0=0;
-stage.addEventListener('touchstart',e=>{ if(e.touches.length===2){ pinch0=dist(e.touches); fs0=prefs.fs; } },{passive:true});
+stage.addEventListener('touchstart',e=>{ if(e.touches.length===2){ pinch0=dist(e.touches); fs0=fsEf; } },{passive:true});
 stage.addEventListener('touchmove',e=>{ if(e.touches.length===2 && pinch0){ e.preventDefault(); setFs(fs0*dist(e.touches)/pinch0); } },{passive:false});
 stage.addEventListener('touchend',()=>{ pinch0=0; },{passive:true});
 function dist(t){ return Math.hypot(t[0].clientX-t[1].clientX, t[0].clientY-t[1].clientY); }
 
+/* ============ control o pedal Bluetooth ============ */
+// lo que mandan los pedales pasa-páginas y los botones de pista de los auriculares
+const T_SIG=['PageDown','MediaTrackNext'], T_ANT=['PageUp','MediaTrackPrevious'];
+let aprendiendo=0, ultimoPaso=0;
+function nombreTecla(t){ return t.key===' ' ? 'Espacio' : (t.key && t.key!=='Unidentified' ? t.key : (t.code || 'tecla '+t.keyCode)); }
+function esTeclaAprendida(e){
+  const t=prefs.ctl;
+  return !!t && (t.key && t.key!=='Unidentified' ? e.key===t.key : e.keyCode===t.keyCode);
+}
+function ctlInfo(msg, cls){
+  const el=$('#ctlStatus'); el.className='status '+(cls||'');
+  el.textContent = msg || (prefs.ctl ? 'Aprendido: «'+nombreTecla(prefs.ctl)+'» pasa al tema siguiente.' : 'Sin botón aprendido.');
+}
+$('#btnLearn').onclick=e=>{
+  e.currentTarget.blur();  // si no, un control que mande Enter volvería a tocar este botón
+  clearTimeout(aprendiendo);
+  ctlInfo('Apretá ahora el botón del control…');
+  aprendiendo=setTimeout(()=>{
+    aprendiendo=0;
+    ctlInfo('No llegó ninguna tecla. Si es un control de selfie, Android se queda con ese botón (es «subir volumen») y la app no lo ve: hace falta un pedal o un control que mande Avanzar página.','err');
+  }, 10000);
+};
+$('#btnLearnOff').onclick=()=>{ prefs.ctl=null; savePrefs(); ctlInfo(); };
+function aprender(e){
+  clearTimeout(aprendiendo); aprendiendo=0;
+  prefs.ctl={key:e.key, code:e.code, keyCode:e.keyCode}; savePrefs();
+  ctlInfo('Listo: «'+nombreTecla(prefs.ctl)+'» pasa al tema siguiente.','ok');
+}
+function offInfo(){
+  const el=$('#offInfo');
+  if(!('serviceWorker' in navigator) || !window.isSecureContext || !location.protocol.startsWith('http')){
+    el.className='status err';
+    el.textContent='Abierta así no queda guardada para usarla sin internet. Entrá por la dirección https donde está publicada y instalala desde el menú del navegador.';
+  } else if(navigator.serviceWorker.controller){
+    el.className='status ok';
+    el.textContent='Lista: en este dispositivo anda sin internet. Sólo los videos de YouTube necesitan conexión.';
+  } else {
+    el.className='status';
+    el.textContent='Preparándose para andar sin internet: cerrala y volvé a abrirla una vez con conexión.';
+  }
+}
+
 document.addEventListener('keydown',e=>{
+  if(aprendiendo){
+    if(!/^(Shift|Control|Alt|Meta)$/.test(e.key)){ e.preventDefault(); aprender(e); }
+    return;
+  }
   if(/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
   const k=e.key;
+  const sig=esTeclaAprendida(e) || T_SIG.includes(k), ant=T_ANT.includes(k);
+  if(sig || ant){
+    if(document.querySelector('.sheet.open')) return;  // en los menús, las teclas hacen lo de siempre
+    e.preventDefault();
+    if(e.repeat) return;  // pedal pisado: un solo paso
+    if(document.body.classList.contains('syncing')){ $(sig ? '#syncTap' : '#syncUndo').click(); return; }
+    if(now()-ultimoPaso<400) return;  // hay controles que mandan la tecla dos veces
+    ultimoPaso=now(); step(sig ? 1 : -1);
+    return;
+  }
   if(k===' '||k==='Enter'){ e.preventDefault(); document.body.classList.contains('syncing')? $('#syncTap').click() : setPlaying(!playing); }
   else if(k==='ArrowUp'){ e.preventDefault(); prefs.speed=Math.min(160,prefs.speed+5); applyPrefs(); }
   else if(k==='ArrowDown'){ e.preventDefault(); prefs.speed=Math.max(5,prefs.speed-5); applyPrefs(); }
   else if(k==='ArrowRight'){ e.preventDefault(); (isKaraoke()||hasAudio())? seek(clock+5) : (stage.scrollTop+=stage.clientHeight*0.4); }
   else if(k==='ArrowLeft'){ e.preventDefault(); $('#btnBack').click(); }
-  else if(k==='+'||k==='='){ setFs(prefs.fs+4); }
-  else if(k==='-'||k==='_'){ setFs(prefs.fs-4); }
+  else if(k==='+'||k==='='){ setFs(fsEf+4); }
+  else if(k==='-'||k==='_'){ setFs(fsEf-4); }
   else if(k.toLowerCase()==='f'){ $('#btnZen').click(); }
 });
 
 /* ============ arranque ============ */
 cur = live().find(s=>s.id===prefs.last) || live()[0] || null;
 applyPrefs(); pinUI(); render(); rafId=requestAnimationFrame(tick);
+// pantalla completa, girar la tablet: se recalcula el tope de la letra y se reacomoda la línea actual
+if(window.ResizeObserver){
+  let rz=0;
+  new ResizeObserver(()=>{ cancelAnimationFrame(rz); rz=requestAnimationFrame(()=>{ ajustarFs(); centrar(false); }); }).observe(stage);
+}
 
 /* service worker: la app queda disponible sin internet */
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){

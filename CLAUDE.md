@@ -31,6 +31,9 @@ workflow `.github/workflows/pages.yml`. Push a `main` = publicado en ~2 minutos.
 ### Dónde vive cada cosa
 
 - **Temas** (letras, tiempos, metadatos): `localStorage`, clave `atril.data.v2`.
+- **Lista del show**: `data.show = {ids, updatedAt}`, dentro de `atril.data.v2`.
+  Viaja entera en el respaldo y en Drive y gana la más nueva: no se mezcla tema
+  por tema. Puede tener ids de temas borrados; `showList()` los filtra.
 - **Audios**: IndexedDB, base `atril`, store `audio`, con el id del tema de
   clave. No van en `localStorage` ni en el respaldo `.json`.
 - **Preferencias**: `localStorage`, `atril.prefs.v2`.
@@ -57,6 +60,15 @@ LRC estándar, que el editor muestra y acepta.
 
 El **adelanto** (`prefs.lead`) se aplica al reproducir, no al grabar: así se
 ajusta sin volver a sincronizar.
+
+### Dos líneas siempre a la vista
+
+Pedido del usuario: aunque la banda se pierda, tiene que ver la línea actual y
+la que viene. Por eso la actual se ubica al 22% de la pantalla (`centrar()`) y
+`ajustarFs()` topea la letra para que la actual y la siguiente entren juntas.
+El tamaño que se ve (`fsEf`) puede ser menor que el pedido (`prefs.fs`); A+, A−
+y el pellizco parten de `fsEf`. Se recalcula al cambiar de tema y con un
+`ResizeObserver` sobre `#stage` (girar la tablet, pantalla completa).
 
 ### Sincronización con Drive
 

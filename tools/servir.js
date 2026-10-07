@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Servidor estatico minimo para el Atril. Sin dependencias: no hace falta
-// npm install. Sirve la carpeta public/ y abre en letras.html.
+// npm install. Sirve la carpeta del repo y abre en index.html.
 //
 //   node tools/servir.js [puerto]
 
@@ -29,7 +29,7 @@ const servidor = http.createServer((req, res) => {
   let rel = decodeURIComponent(new URL(req.url, 'http://x').pathname);
   if (rel === '/') rel = '/index.html';
 
-  // nada de salir de public/
+  // nada de salir de la carpeta del repo
   const destino = path.join(RAIZ, path.normalize(rel).replace(/^(\.\.[/\\])+/, ''));
   if (!destino.startsWith(RAIZ)) {
     res.writeHead(403).end('Prohibido');
@@ -67,7 +67,7 @@ servidor.listen(PUERTO, '0.0.0.0', () => {
   for (const [, addrs] of Object.entries(os.networkInterfaces())) {
     for (const a of addrs || []) {
       if (a.family === 'IPv4' && !a.internal) {
-        console.log(`    http://${a.address}:${PUERTO}/letras.html   (desde la tablet, misma wifi)`);
+        console.log(`    http://${a.address}:${PUERTO}/   (desde la tablet, misma wifi; por http no queda para usar sin internet)`);
       }
     }
   }
