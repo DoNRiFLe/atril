@@ -56,8 +56,12 @@ usar sin internet: sirve para probar, no para el show.
 ## Ponerle los tiempos
 
 **Con el audio cargado**, ⚙ → *Sincronizar tap a tap*: el primer toque arranca
-el tema, y después marcás una vez por línea. Tres minutos y queda clavado.
-El ↶ deshace y rebobina para volver a escuchar esa parte.
+el tema y queda en la **intro**; recién cuando entra la voz tocás para la 1ª
+línea, y después una vez por línea. Tres minutos y queda clavado. El ↶ deshace
+y rebobina para volver a escuchar esa parte.
+
+Al tocar, mientras dura la intro arriba dice *♪ Intro · entrás en 5 s*, con la
+cuenta regresiva hasta la primera línea.
 
 **Automático**, con Whisper: ver [tools/README.md](tools/README.md). Anda bien
 con voces limpias; con la banda encima conviene el tap a tap.
@@ -75,6 +79,11 @@ Si el tema que estás viendo es del show, ⏮ ⏭ (y el pedal) siguen ese orden;
 arriba dice en cuál vas (*show 3/12*) y al final de la letra, cuál sigue.
 Tocando ese *Sigue:* pasás directo. La lista viaja con el respaldo y con Drive.
 
+Mientras estás en un tema del show, la barra de abajo se agranda para usarla
+sin mirar: sin la velocidad, con ⏮ ⏭ y un botón grande de pausa. ☰ abre directo
+la lista del show, con el tema actual a la vista. En pantalla completa la barra
+de abajo sigue estando, con **✕ Salir** para volver.
+
 ## Controles
 
 | | |
@@ -82,6 +91,7 @@ Tocando ese *Sigue:* pasás directo. La lista viaja con el respaldo y con Drive.
 | Tocar la pantalla | Pausa / sigue |
 | Tocar una línea | Salta a ese momento: si la banda se adelantó o se atrasó, el karaoke se reengancha desde ahí |
 | Tocar *Sigue: …* | Pasa al tema siguiente del show |
+| Tocar *♪ Intro* | Vuelve al principio del tema |
 | Doble toque | Pantalla completa |
 | Pellizcar | Tamaño de letra |
 | Espacio | Pausa / sigue (y marca, al sincronizar) |

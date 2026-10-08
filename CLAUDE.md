@@ -64,11 +64,20 @@ ajusta sin volver a sincronizar.
 ### Dos líneas siempre a la vista
 
 Pedido del usuario: aunque la banda se pierda, tiene que ver la línea actual y
-la que viene. Por eso la actual se ubica al 22% de la pantalla (`centrar()`) y
-`ajustarFs()` topea la letra para que la actual y la siguiente entren juntas.
+la que viene. Por eso la actual se ubica al 10% de la pantalla (`centrar()`) y
+`ajustarFs()` topea la letra para que la actual y la siguiente entren juntas en
+el 85% del alto (el máximo pedido es 200 px).
 El tamaño que se ve (`fsEf`) puede ser menor que el pedido (`prefs.fs`); A+, A−
 y el pellizco parten de `fsEf`. Se recalcula al cambiar de tema y con un
 `ResizeObserver` sobre `#stage` (girar la tablet, pantalla completa).
+
+Con karaoke o sincronizando hay una línea **intro** (`introEl`) antes de la 1ª,
+fuera de `lineEls`: es la actual mientras `active === -1` (`elDe(-1)`), y al
+tocar muestra cuántos segundos faltan para entrar.
+
+**Modo show** (`body.show`): el tema actual está en la lista del show. La barra
+de abajo se agranda, pierde la velocidad y suma una pausa grande (`#btnPlay2`).
+En pantalla completa (`body.zen`) se va sólo la barra de arriba.
 
 ### Sincronización con Drive
 
@@ -92,6 +101,9 @@ puesto nunca se sube ni se exporta en claro** salvo con *Exportar sin cifrar*.
 - **Que el primer tap de sincronización marcara la línea 1.** Arrancar el audio
   y marcar eran el mismo toque, así que la intro instrumental se comía la
   primera línea.
+- **Resaltar con los tiempos viejos mientras se sincroniza.** Al re-sincronizar
+  un tema que ya tenía tiempos, `tick()` y `seek()` seguían marcando líneas
+  solas. Sincronizando, sólo el toque marca: los dos lo chequean con `syncing`.
 - **El VAD de Whisper calibrado para voz hablada** descartaba temas enteros con
   la banda sonando. Va con `threshold` bajo y reintento sin filtro.
 - **Dar por hecho que el usuario tiene algo instalado.** Los scripts de Windows

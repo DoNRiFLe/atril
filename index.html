@@ -48,7 +48,7 @@
     white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
   }
   header .title small{display:block;font-weight:400;font-size:13px;color:var(--dim)}
-  body.zen header, body.zen footer{display:none}
+  body.zen header{display:none}
 
   #stage{flex:1 1 auto; overflow-y:auto; overflow-x:hidden; position:relative; scrollbar-width:none}
   #stage::-webkit-scrollbar{display:none}
@@ -64,6 +64,8 @@
   .ln.done{opacity:.3}
   .ln.cur{opacity:1; color:var(--accent)}
   .ln.next{opacity:.85}
+  .intro{display:none; font-style:italic}
+  body.conlinea .intro{display:block}
   body.plain .ln{opacity:1}
   .sigue{margin:1.4em 0 0; font-size:.42em; font-weight:600; color:var(--dim); cursor:pointer}
   .sigue b{color:var(--fg)}
@@ -95,6 +97,14 @@
   body.hasyt #btnYt{display:inline-flex}
   body.hasaudio #audioBox{display:flex}
   body.hasaudio #speedBox{display:none}
+  /* tocando el show o en pantalla completa: barra grande, para usarla sin mirar; en el show, sin velocidad */
+  #btnPlay2{display:none; flex:1 1 auto; justify-content:center}
+  body.show #btnPlay2, body.zen #btnPlay2{display:inline-flex; font-size:30px}
+  body.show #speedBox{display:none}
+  body.show footer, body.zen footer{padding:10px 12px; gap:10px}
+  body.show footer .btn, body.zen footer .btn{font-size:24px; padding:16px 20px; border-radius:14px}
+  body.show footer .clock, body.zen footer .clock{font-size:20px}
+  body.show #ytbox, body.zen #ytbox{bottom:100px}
 
   .sheet{
     position:fixed; inset:0; background:var(--bg); z-index:50;
@@ -162,6 +172,7 @@
   <button class="btn" id="btnBack">−5s</button>
   <button class="btn" id="btnReset">⟲</button>
   <div class="clock" id="clock">0:00</div>
+  <button class="btn" id="btnPlay2" title="Pausa / sigue">▶</button>
   <div class="ctlbox" id="speedBox">
     <label>Vel</label>
     <input type="range" id="speed" min="5" max="160" value="45">
@@ -254,7 +265,7 @@
     </div>
     <div>
       <div class="row"><b style="flex:1">Tamaño de letra</b><span id="fsVal" class="clock"></span></div>
-      <input type="range" id="fsRange" min="20" max="140" step="2">
+      <input type="range" id="fsRange" min="20" max="200" step="2">
     </div>
     <div class="row"><b style="flex:1">Atenuar líneas inactivas</b><button class="btn" id="btnDim">—</button></div>
     <div class="row"><b style="flex:1">Pantalla siempre encendida</b><button class="btn" id="btnWake">—</button></div>
@@ -466,7 +477,7 @@ function toLrc(song){
 
 /* ============ render ============ */
 const stage=$('#stage'), lyrics=$('#lyrics'), empty=$('#empty'), player=$('#player');
-let lineEls=[], active=-1, audioURL=null;
+let lineEls=[], active=-1, audioURL=null, introEl=null;
 let yt=null, ytListo=false, ytId=null;
 
 function render(){
@@ -474,9 +485,12 @@ function render(){
   $('#hArtist').textContent = '';
   lyrics.innerHTML=''; lineEls=[];
   active=-2;  // distinto de -1, para que highlight(-1) marque igual la primera línea como la que viene
-  if(!cur){ empty.style.display='block'; empty.innerHTML='No hay temas cargados.<br>Tocá ☰ → <b>+ Nuevo</b>.'; loadAudio(); return; }
+  if(!cur){ empty.style.display='block'; empty.innerHTML='No hay temas cargados.<br>Tocá ☰ → <b>+ Nuevo</b>.'; pintarShow(); loadAudio(); return; }
   empty.style.display='none';
   atenuar();
+  // antes de la 1ª línea va la intro: es la "actual" hasta que entra la letra
+  introEl=document.createElement('p'); introEl.className='ln intro'; introEl.textContent='♪ Intro';
+  lyrics.appendChild(introEl);
   cur.lines.forEach((txt,i)=>{
     const p=document.createElement('p');
     p.className='ln'+(txt.trim()?'':' blank');
@@ -484,7 +498,7 @@ function render(){
     lyrics.appendChild(p); lineEls.push(p);
   });
   pintarShow(); ajustarFs();
-  stage.scrollTop=0; clock=0; updateClock(); highlight(-1);
+  stage.scrollTop=0; clock=0; updateClock(); highlight(-1); centrar(false);
   loadAudio();
 }
 function isKaraoke(){ return !!(cur && cur.timings && cur.timings.length); }
@@ -492,16 +506,26 @@ function hasAudio(){ return !!audioURL || hayYt(); }
 function esYt(){ return !audioURL && hayYt(); }
 function highlight(i){
   if(i===active) return;
-  if(lineEls[active]) lineEls[active].classList.remove('cur');
+  const antes=elDe(active); if(antes) antes.classList.remove('cur');
   const j=sigLinea(i);
   for(let k=0;k<lineEls.length;k++){ lineEls[k].classList.toggle('done', k<i); lineEls[k].classList.toggle('next', k===j); }
   active=i;
-  if(lineEls[i]){ lineEls[i].classList.add('cur'); centrar(true); }
+  const el=elDe(i); if(el){ el.classList.add('cur'); centrar(true); }
 }
+// -1 es la intro, cuando se ve (karaoke o sincronizando)
+function elDe(i){ return i===-1 ? (document.body.classList.contains('conlinea') ? introEl : null) : lineEls[i]; }
 // la actual arriba, para que debajo entre entera la que viene
 function centrar(suave){
-  const el=lineEls[active]; if(!el) return;
-  stage.scrollTo({top:el.offsetTop - stage.clientHeight*0.22, behavior:suave?'smooth':'auto'});
+  const el=elDe(active); if(!el) return;
+  stage.scrollTo({top:el.offsetTop - stage.clientHeight*0.10, behavior:suave?'smooth':'auto'});
+}
+// en la intro, cuánto falta para la 1ª línea: para saber cuándo entrar
+function textoIntro(){
+  if(!introEl) return;
+  let t='♪ Intro';
+  const T0 = isKaraoke() && !document.body.classList.contains('syncing') ? cur.timings.find(x=>x!=null) : null;
+  if(T0!=null && T0-prefs.lead-clock>0) t+=' · entrás en '+Math.ceil(T0-prefs.lead-clock)+' s';
+  if(introEl.textContent!==t) introEl.textContent=t;
 }
 function sigLinea(i){
   if(!cur) return -1;
@@ -510,13 +534,15 @@ function sigLinea(i){
 }
 // atenuar sólo tiene sentido cuando hay una línea actual: con el autoscroll se lee todo parejo
 function atenuar(){
-  document.body.classList.toggle('plain', !prefs.dim || !(isKaraoke() || document.body.classList.contains('syncing')));
+  const conLinea = isKaraoke() || document.body.classList.contains('syncing');
+  document.body.classList.toggle('conlinea', conLinea);
+  document.body.classList.toggle('plain', !prefs.dim || !conLinea);
 }
 
 /* ============ tamaño de letra: siempre entran la línea actual y la que viene ============ */
 let fsEf=44;
 function ajustarFs(){
-  const css=document.documentElement.style, alto=stage.clientHeight*0.72;
+  const css=document.documentElement.style, alto=stage.clientHeight*0.85;
   const entra=fs=>{ css.setProperty('--fs', fs+'px'); return !(alto>0) || parMasAlto()<=alto; };
   let fs=prefs.fs;
   if(!entra(fs)){
@@ -632,8 +658,11 @@ $('#seekbar').oninput=e=>{
 
 /* ============ reproducción ============ */
 let playing=false, clock=0, rafId=null, lastTs=0, scrollAcc=0;
+function pintarPlay(){
+  ['#btnPlay','#btnPlay2'].forEach(s=>{ $(s).textContent = playing?'⏸':'▶'; $(s).classList.toggle('on',playing); });
+}
 function setPlaying(v){
-  playing=v; $('#btnPlay').textContent = v?'⏸':'▶'; $('#btnPlay').classList.toggle('on',v);
+  playing=v; pintarPlay();
   if(esYt()){ try{ v ? yt.playVideo() : yt.pauseVideo(); }catch(e){} }
   else if(audioURL){ if(v) player.play().catch(()=>{}); else player.pause(); }
   if(v){ lastTs=performance.now(); scrollAcc=0; if(!rafId) rafId=requestAnimationFrame(tick); wakeOn(); }
@@ -651,10 +680,12 @@ function tick(ts){
     const d=yt.getDuration()||0;
     if(d){ $('#seekbar').value=Math.round(clock/d*1000); $('#dur').textContent=fmt(d); }
   }
+  // sincronizando, las líneas las marca el toque: ni los tiempos viejos ni el autoscroll las mueven
+  if(document.body.classList.contains('syncing')) return;
   if(isKaraoke()){
     let i=-1; const T=cur.timings, lead=prefs.lead;
     for(let k=0;k<T.length;k++){ if(T[k]!=null && T[k]-lead<=clock) i=k; else if(T[k]!=null) break; }
-    highlight(i);
+    highlight(i); textoIntro();
     if(!hasAudio() && i>=T.length-1 && clock>T[T.length-1]+8) setPlaying(false);
   } else if(!hasAudio()){
     scrollAcc += (prefs.speed/2) * dt;
@@ -670,10 +701,10 @@ function seek(t){
   if(esYt()){ try{ yt.seekTo(clock, true); }catch(e){} }
   else if(audioURL) player.currentTime=clock;
   updateClock();
-  if(isKaraoke()){
+  if(isKaraoke() && !document.body.classList.contains('syncing')){
     let i=-1;
     for(let k=0;k<cur.timings.length;k++) if(cur.timings[k]!=null && cur.timings[k]-prefs.lead<=clock) i=k;
-    highlight(i);
+    highlight(i); textoIntro();
   }
 }
 function resetAll(){
@@ -704,7 +735,7 @@ function applyPrefs(){
   $('#btnGAudio').textContent = gcfg.audio?'Sí':'No'; $('#btnGAudio').classList.toggle('on',gcfg.audio);
   savePrefs();
 }
-function setFs(v){ prefs.fs=Math.max(20,Math.min(140,Math.round(v))); applyPrefs(); centrar(false); }
+function setFs(v){ prefs.fs=Math.max(20,Math.min(200,Math.round(v))); applyPrefs(); centrar(false); }
 
 /* ============ lista ============ */
 function renderList(){
@@ -789,8 +820,9 @@ function orden(){ const S=showList(); return cur && S.includes(cur) ? S : live()
 function siguienteDelShow(){ const S=showList(), i=S.indexOf(cur); return i>=0 && i<S.length-1 ? S[i+1] : null; }
 // el lugar en el show arriba, y al final de la letra cuál viene
 function pintarShow(){
+  const S=showList(), i=cur ? S.indexOf(cur) : -1;
+  document.body.classList.toggle('show', i>=0);  // modo show: barra de abajo grande y sin velocidad
   if(!cur) return;
-  const S=showList(), i=S.indexOf(cur);
   $('#hArtist').textContent=[cur.artist, i>=0 ? ('show '+(i+1)+'/'+S.length) : ''].filter(Boolean).join(' · ');
   let p=lyrics.querySelector('.sigue'); const sig=siguienteDelShow();
   if(!sig){ if(p) p.remove(); return; }
@@ -1298,21 +1330,22 @@ $('#btnSync').onclick=()=>{
   closeS($('#sheetCfg'));
   syncMarks=[]; syncIdx=0; clock=0; setPlaying(false); seek(0);
   updateClock(); document.body.classList.add('syncing'); atenuar();
-  highlight(-1); stage.scrollTo({top:0,behavior:'smooth'});
+  active=-2; highlight(-1); textoIntro();  // -2: que la intro quede marcada aunque ya estuviera en -1
   $('#syncTap').textContent = hasAudio()? '▶ ARRANCAR EL AUDIO' : '▶ ARRANCAR';
 };
 function syncStop(){
   document.body.classList.remove('syncing'); atenuar();
   playing=false;
   if(esYt()){ try{ yt.pauseVideo(); }catch(e){} } else if(audioURL) player.pause();
-  $('#btnPlay').textContent='▶'; $('#btnPlay').classList.remove('on');
+  pintarPlay();
 }
+const TAP_INTRO='INTRO… TOCÁ CUANDO ENTRA LA 1ª LÍNEA';
 $('#syncCancel').onclick=()=>{ syncStop(); render(); };
 $('#syncTap').onclick=()=>{
   // el primer toque solo arranca: asi la intro instrumental no se come la linea 1
   if(!playing){
     clock=0; seek(0); setPlaying(true);
-    $('#syncTap').textContent='MARCÁ LA 1ª LÍNEA';
+    $('#syncTap').textContent=TAP_INTRO;
     return;
   }
   while(syncIdx<cur.lines.length && !cur.lines[syncIdx].trim()){ syncMarks[syncIdx]=null; syncIdx++; }
@@ -1340,7 +1373,7 @@ function actualizarTapLabel(){
   if(!playing){ $('#syncTap').textContent = hasAudio()? '▶ ARRANCAR EL AUDIO' : '▶ ARRANCAR'; return; }
   const marcadas = syncMarks.filter(v=>typeof v==='number').length;
   const left = cur.lines.slice(syncIdx).filter(l=>l.trim()).length;
-  if(!marcadas){ $('#syncTap').textContent='MARCÁ LA 1ª LÍNEA'; return; }
+  if(!marcadas){ $('#syncTap').textContent=TAP_INTRO; return; }
   $('#syncTap').textContent = left? ('SIGUIENTE ('+left+' restantes)') : 'ÚLTIMA — GUARDAR';
 }
 $('#syncSave').onclick=()=>{
@@ -1358,13 +1391,18 @@ $('#btnClearTimings').onclick=()=>{
 };
 
 /* ============ controles ============ */
-$('#btnPlay').onclick=()=>setPlaying(!playing);
+$('#btnPlay').onclick=$('#btnPlay2').onclick=()=>setPlaying(!playing);
 // desde el tamaño que se ve, no desde el pedido: si está en el tope, A− achica al primer toque
 $('#btnPlus').onclick=()=>setFs(fsEf+4);
 $('#btnMinus').onclick=()=>setFs(fsEf-4);
 $('#btnBack').onclick=()=>{ if(isKaraoke()||hasAudio()) seek(clock-5); else stage.scrollTop-=stage.clientHeight*0.4; };
 $('#btnReset').onclick=resetAll;
-$('#btnList').onclick=()=>{ renderList(); openS($('#sheetList')); };
+$('#btnList').onclick=()=>{
+  // tocando el show, ☰ abre la lista del show entera, con el tema actual a la vista
+  if(cur && showList().includes(cur)) prefs.tab='show';
+  renderList(); openS($('#sheetList'));
+  const a=$('#songs .actual'); if(a) a.scrollIntoView({block:'center'});
+};
 $('#btnCfg').onclick=()=>{ applyPrefs(); $('#gClientId').value=gcfg.clientId; ctlInfo(); offInfo(); openS($('#sheetCfg')); };
 $('#search').oninput=renderList;
 $('#speed').oninput=e=>{ prefs.speed=+e.target.value; savePrefs(); };
@@ -1382,16 +1420,24 @@ $('#btnNextSong').onclick=()=>step(1);
 $('#btnPrevSong').onclick=()=>step(-1);
 $('#btnYt').onclick=()=>document.body.classList.toggle('ytmin');
 $('#ytHide').onclick=e=>{ e.stopPropagation(); document.body.classList.add('ytmin'); };
-$('#btnZen').onclick=()=>{
-  document.body.classList.toggle('zen');
-  if(document.fullscreenElement) document.exitFullscreen&&document.exitFullscreen();
-  else document.documentElement.requestFullscreen && document.documentElement.requestFullscreen().catch(()=>{});
-};
+// pantalla completa: se va la barra de arriba, la de abajo queda (grande) con un "Salir"
+function setZen(on){
+  document.body.classList.toggle('zen', on);
+  $('#btnZen').textContent = on ? '✕ Salir' : '⛶';
+  try{
+    if(on && !document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{});
+    else if(!on && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(()=>{});
+  }catch(e){}
+}
+$('#btnZen').onclick=()=>setZen(!document.body.classList.contains('zen'));
+// si sale de pantalla completa con el gesto de atrás, que vuelva la barra de arriba
+document.addEventListener('fullscreenchange',()=>{ if(!document.fullscreenElement && document.body.classList.contains('zen')) setZen(false); });
 
 stage.addEventListener('click', e=>{
   if(document.body.classList.contains('syncing')) return;
   if(e.target.closest('.sigue')){ step(1); return; }
   const ln=e.target.closest('.ln');
+  if(ln && ln===introEl){ seek(0); return; }  // tocar la intro vuelve al principio, como tocar una línea
   if(ln && isKaraoke()){
     const i=+ln.dataset.i;
     if(cur.timings[i]!=null){ seek(cur.timings[i]); return; }
