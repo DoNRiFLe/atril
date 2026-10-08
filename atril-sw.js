@@ -1,7 +1,7 @@
 // Service worker del Atril: deja la app funcionando sin internet.
 // Subí el numero de version cuando cambie letras.html para forzar la
 // actualizacion en las tablets que ya la tengan instalada.
-const CACHE = 'atril-v11';
+const CACHE = 'atril-v12';
 const ARCHIVOS = [
   './',
   'index.html',

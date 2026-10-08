@@ -162,6 +162,7 @@
   body.syncing .syncbar{display:flex}
   body.syncing footer{display:none}
   .syncbar .big{flex:1 1 auto; background:var(--accent); color:#111; border-radius:12px; padding:18px; font-size:18px; font-weight:800; text-align:center}
+  .synchint{position:absolute; left:0; right:0; bottom:100%; padding:8px 12px; background:var(--panel); border-top:1px solid var(--line); font-size:14px; color:var(--dim); text-align:center}
   #cloudDot{width:9px;height:9px;border-radius:50%;background:var(--dim);flex:0 0 auto}
   #cloudDot.on{background:var(--ok)} #cloudDot.busy{background:var(--accent)} #cloudDot.err{background:var(--danger)}
 </style>
@@ -199,6 +200,7 @@
 </footer>
 
 <div class="syncbar">
+  <div class="synchint" id="syncHint" style="display:none"></div>
   <button class="btn" id="syncCancel">✕</button>
   <button class="big" id="syncTap">TOCAR EN CADA LÍNEA</button>
   <button class="btn" id="syncUndo">↶</button>
@@ -587,7 +589,7 @@ function hasAudio(){ return !!audioURL || hayYt(); }
 function esYt(){ return !audioURL && hayYt(); }
 function highlight(i){
   if(i===active) return;
-  const antes=elDe(active); if(antes) antes.classList.remove('cur');
+  lyrics.querySelectorAll('.cur').forEach(e=>e.classList.remove('cur'));  // nunca dos actuales a la vez
   const j=sigLinea(i);
   for(let k=0;k<lineEls.length;k++){ lineEls[k].classList.toggle('done', k<i); lineEls[k].classList.toggle('next', k===j); }
   active=i;
@@ -748,6 +750,8 @@ function setPlaying(v){
   else if(audioURL){ if(v) player.play().catch(()=>{}); else player.pause(); }
   if(v){ lastTs=performance.now(); scrollAcc=0; if(!rafId) rafId=requestAnimationFrame(tick); wakeOn(); }
   else wakeOff();
+  // sincronizando, el botón grande tiene que decir si sigue o está en pausa (p. ej. si se pausó el video)
+  if(document.body.classList.contains('syncing')) actualizarTapLabel();
 }
 function tick(ts){
   rafId=requestAnimationFrame(tick);
@@ -779,7 +783,8 @@ function fmt(t){ const m=Math.floor(t/60), s=Math.floor(t%60); return m+':'+Stri
 function updateClock(){ $('#clock').textContent = fmt(clock); }
 function seek(t){
   clock=Math.max(0,t);
-  if(esYt()){ try{ yt.seekTo(clock, true); }catch(e){} }
+  // un video "cargado sin arrancar" se pone a reproducir al saltar: si la app está en pausa, queda en pausa
+  if(esYt()){ try{ yt.seekTo(clock, true); if(!playing) yt.pauseVideo(); }catch(e){} }
   else if(audioURL) player.currentTime=clock;
   updateClock();
   if(isKaraoke() && !document.body.classList.contains('syncing')){
@@ -1608,13 +1613,65 @@ $('#btnGAudio').onclick=()=>{ gcfg.audio=!gcfg.audio; saveG(); applyPrefs(); };
 
 /* ============ sincronizar tap a tap ============ */
 let syncIdx=0, syncMarks=[];
+// El avance se guarda con cada toque: si se corta (se cierra la app, se toca ✕), se sigue desde ahí.
+const LS_SYNC='atril.sync.v1';
+function guardarAvance(){ try{ localStorage.setItem(LS_SYNC, JSON.stringify({id:cur.id, n:cur.lines.length, marcas:syncMarks, idx:syncIdx})); }catch(e){} }
+function borrarAvance(){ try{ localStorage.removeItem(LS_SYNC); }catch(e){} }
+function avanceGuardado(){
+  const p=load(LS_SYNC);  // si cambió la letra (otra cantidad de líneas), ya no sirve
+  return p && cur && p.id===cur.id && p.n===cur.lines.length && Array.isArray(p.marcas) && p.marcas.some(v=>typeof v==='number') ? p : null;
+}
+const marcadas=()=>syncMarks.filter(v=>typeof v==='number').length;
+// listo para marcar la línea i: arranca 3 s antes de la última marca, para entrar en tiempo
+function prepararSeguir(i){
+  syncIdx=i;
+  let ancla=0, k=i-1;
+  for(; k>=0; k--) if(typeof syncMarks[k]==='number'){ ancla=syncMarks[k]; break; }
+  seek(Math.max(0, ancla-3));
+  active=-2; highlight(k);  // la última marcada queda como actual (o la intro, si no hay)
+  actualizarTapLabel();
+}
+// en pausa, tocar una línea de la letra: seguir desde ahí con los tiempos que ya tienen las de antes
+function seguirDesde(i){
+  const nuevas=[];
+  for(let k=0;k<i;k++){
+    if(!cur.lines[k].trim()){ nuevas[k]=null; continue; }
+    const t = typeof syncMarks[k]==='number' ? syncMarks[k] : (cur.timings && cur.timings[k]!=null ? cur.timings[k] : null);
+    if(t==null){ alert('Para seguir desde esa línea, las de antes tienen que tener tiempo: guardá lo que marcaste, o empezá desde el principio.'); return; }
+    nuevas[k]=t;
+  }
+  syncMarks=nuevas; prepararSeguir(i); guardarAvance();
+}
+// Guardar a medias deja las líneas sin marcar con el tiempo de la última marcada: si al final hay
+// una racha así, ahí se cortó. Devuelve la línea desde donde seguir, o -1.
+function corteGuardado(){
+  if(!cur || !cur.timings) return -1;
+  const idx=cur.lines.map((l,i)=>l.trim()?i:-1).filter(i=>i>=0), T=cur.timings;
+  if(idx.length<2) return -1;
+  let k=idx.length-1;
+  while(k>0 && T[idx[k-1]]===T[idx[idx.length-1]]) k--;
+  return k<idx.length-1 ? idx[k+1] : -1;
+}
 $('#btnSync').onclick=()=>{
   if(!cur) return;
   closeS($('#sheetCfg'));
   syncMarks=[]; syncIdx=0; clock=0; setPlaying(false); seek(0);
   updateClock(); document.body.classList.add('syncing'); atenuar();
   active=-2; highlight(-1); textoIntro();  // -2: que la intro quede marcada aunque ya estuviera en -1
-  $('#syncTap').textContent = hasAudio()? '▶ ARRANCAR EL AUDIO' : '▶ ARRANCAR';
+  const p=avanceGuardado();
+  if(p){
+    const n=p.marcas.filter(v=>typeof v==='number').length;
+    if(confirm('Quedó una sincronización a medias de este tema: '+n+' líneas marcadas.\n\n¿Seguís desde donde quedó? (Cancelar empieza de cero.)')){
+      syncMarks=p.marcas.map(v=>typeof v==='number' ? v : undefined); prepararSeguir(p.idx); return;
+    }
+    borrarAvance();
+  }
+  const c=corteGuardado();
+  if(c>0){
+    const conLetra=cur.lines.filter(l=>l.trim()).length, hechas=cur.lines.slice(0,c).filter(l=>l.trim()).length;
+    if(confirm('Este tema quedó sincronizado hasta la línea '+hechas+' de '+conLetra+'.\n\n¿Seguís desde ahí? (Cancelar empieza de cero.)')){ seguirDesde(c); return; }
+  }
+  actualizarTapLabel();
 };
 function syncStop(){
   document.body.classList.remove('syncing'); atenuar();
@@ -1625,18 +1682,18 @@ function syncStop(){
 const TAP_INTRO='INTRO… TOCÁ CUANDO ENTRA LA 1ª LÍNEA';
 $('#syncCancel').onclick=()=>{ syncStop(); render(); };
 $('#syncTap').onclick=()=>{
-  // el primer toque solo arranca: asi la intro instrumental no se come la linea 1
   if(!playing){
-    clock=0; seek(0); setPlaying(true);
-    $('#syncTap').textContent=TAP_INTRO;
+    // de cero, el primer toque sólo arranca: así la intro instrumental no se come la 1ª línea.
+    // Con líneas ya marcadas es una pausa: sigue desde donde está, no vuelve al principio.
+    if(!marcadas()){ clock=0; seek(0); }
+    setPlaying(true);
     return;
   }
   while(syncIdx<cur.lines.length && !cur.lines[syncIdx].trim()){ syncMarks[syncIdx]=null; syncIdx++; }
   if(syncIdx>=cur.lines.length){ $('#syncSave').click(); return; }
-  syncMarks[syncIdx]=Math.max(0, clock - 0.15);
+  syncMarks[syncIdx]=Math.max(0, Math.round((clock - 0.15)*100)/100);
   highlight(syncIdx); syncIdx++;
-  const left=cur.lines.slice(syncIdx).filter(l=>l.trim()).length;
-  $('#syncTap').textContent = left? ('SIGUIENTE ('+left+' restantes)') : 'ÚLTIMA — GUARDAR';
+  guardarAvance(); actualizarTapLabel();
 };
 $('#syncUndo').onclick=()=>{
   // retrocede hasta la linea con texto anterior y borra su marca
@@ -1649,17 +1706,26 @@ $('#syncUndo').onclick=()=>{
   for(let k=syncIdx-1;k>=0;k--){ if(typeof syncMarks[k]==='number'){ ancla=syncMarks[k]; break; } }
   seek(Math.max(0, ancla-1.5));
   if(playing && audioURL) player.play().catch(()=>{});
-  actualizarTapLabel();
+  guardarAvance(); actualizarTapLabel();
 };
 
 function actualizarTapLabel(){
-  if(!playing){ $('#syncTap').textContent = hasAudio()? '▶ ARRANCAR EL AUDIO' : '▶ ARRANCAR'; return; }
-  const marcadas = syncMarks.filter(v=>typeof v==='number').length;
+  const m=marcadas(), hint=$('#syncHint');
+  if(!playing){
+    $('#syncTap').textContent = m ? ('▶ SEGUIR DESDE '+fmt(clock)) : (hasAudio()? '▶ ARRANCAR EL AUDIO' : '▶ ARRANCAR');
+    // tocar una línea para seguir desde ahí sólo sirve si hay tiempos de antes
+    const puede = m || (cur && cur.timings);
+    hint.textContent = puede ? 'En pausa: tocá una línea de la letra para seguir desde ahí.' : '';
+    hint.style.display = puede ? '' : 'none';
+    return;
+  }
+  hint.style.display='none';
   const left = cur.lines.slice(syncIdx).filter(l=>l.trim()).length;
-  if(!marcadas){ $('#syncTap').textContent=TAP_INTRO; return; }
+  if(!m){ $('#syncTap').textContent=TAP_INTRO; return; }
   $('#syncTap').textContent = left? ('SIGUIENTE ('+left+' restantes)') : 'ÚLTIMA — GUARDAR';
 }
 $('#syncSave').onclick=()=>{
+  borrarAvance();
   if(!syncMarks.some(v=>typeof v==='number')){ syncStop(); render(); return; }
   const T=cur.lines.map((l,i)=> typeof syncMarks[i]==='number' ? syncMarks[i] : null);
   let lastT=0;
@@ -1717,7 +1783,12 @@ $('#btnZen').onclick=()=>setZen(!document.body.classList.contains('zen'));
 document.addEventListener('fullscreenchange',()=>{ if(!document.fullscreenElement && document.body.classList.contains('zen')) setZen(false); });
 
 stage.addEventListener('click', e=>{
-  if(document.body.classList.contains('syncing')) return;
+  if(document.body.classList.contains('syncing')){
+    // en pausa, tocar una línea: seguir sincronizando desde ahí
+    const ln=e.target.closest('.ln');
+    if(!playing && ln && ln.dataset.i!=null) seguirDesde(+ln.dataset.i);
+    return;
+  }
   if(e.target.closest('.sigue')){ step(1); return; }
   const ln=e.target.closest('.ln');
   if(ln && ln===introEl){ seek(0); return; }  // tocar la intro vuelve al principio, como tocar una línea

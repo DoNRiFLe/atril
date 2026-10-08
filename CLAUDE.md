@@ -121,6 +121,13 @@ puesto nunca se sube ni se exporta en claro** salvo con *Exportar sin cifrar*.
 - **Resaltar con los tiempos viejos mientras se sincroniza.** Al re-sincronizar
   un tema que ya tenía tiempos, `tick()` y `seek()` seguían marcando líneas
   solas. Sincronizando, sólo el toque marca: los dos lo chequean con `syncing`.
+- **Que una pausa en medio de la sincronización volviera a 0:00.** El "primer
+  toque arranca" se aplicaba a cualquier toque con la reproducción parada, así
+  que si se pausaba el video, el siguiente toque reiniciaba el tema. Ahora, con
+  líneas ya marcadas, el toque sigue desde donde está. Además el avance se
+  guarda con cada toque (`localStorage`, `atril.sync.v1`) y se puede seguir
+  desde una línea (`seguirDesde()`) o desde donde quedó un guardado a medias
+  (`corteGuardado()`).
 - **El VAD de Whisper calibrado para voz hablada** descartaba temas enteros con
   la banda sonando. Va con `threshold` bajo y reintento sin filtro.
 - **Dar por hecho que el usuario tiene algo instalado.** Los scripts de Windows

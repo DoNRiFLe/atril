@@ -84,6 +84,17 @@ y rebobina para volver a escuchar esa parte.
 Al tocar, mientras dura la intro arriba dice *♪ Intro · entrás en 5 s*, con la
 cuenta regresiva hasta la primera línea.
 
+**Si se corta a la mitad**, no hace falta empezar de nuevo:
+
+- Si se pausa (el video, una notificación, ▶ de arriba), el botón grande dice
+  *▶ SEGUIR DESDE 1:42* y sigue desde ahí.
+- El avance se guarda con cada toque. Si se cierra la app o tocaste ✕, al
+  volver a *Sincronizar* te pregunta si seguís desde donde quedó. Lo mismo si
+  guardaste a medias.
+- En pausa, tocando una línea de la letra seguís desde ahí: las de antes
+  conservan sus tiempos y arranca 3 segundos antes, para entrar en tiempo.
+  Sirve también para rehacer sólo un pedazo.
+
 **Automático**, con Whisper: ver [tools/README.md](tools/README.md). Anda bien
 con voces limpias; con la banda encima conviene el tap a tap.
 
