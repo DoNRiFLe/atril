@@ -51,7 +51,13 @@ usar sin internet: sirve para probar, no para el show.
 ## Cargar un tema
 
 **☰ Temas → + Nuevo**: título, artista y la letra pegada, un renglón por línea
-(los renglones vacíos son pausas). Opcionalmente, el audio del tema.
+(los renglones vacíos son pausas). Opcionalmente, el audio del tema o un link
+de YouTube.
+
+Si pegás el link de YouTube con el título o el artista vacíos, los completa
+solo con el nombre del video (sacando lo de "Official Video", "Karaoke
+Version" y parecidos). Algunos canales ponen el tema antes que la banda: si
+quedó al revés, **⇄ Invertir**. Lo que ya escribiste no lo toca.
 
 ## Ponerle los tiempos
 
@@ -69,6 +75,28 @@ con voces limpias; con la banda encima conviene el tap a tap.
 También podés importar y exportar `.lrc`, que es el formato estándar de
 karaoke: en el editor de cada tema la letra se ve con sus `[mm:ss.cc]` adelante
 y se corrigen a mano.
+
+## Marcas de canto
+
+En el editor del tema, arriba de la letra, hay una fila de botones para marcar
+cómo se canta cada parte. Ponés el cursor justo donde va y tocás la marca:
+
+| | |
+|---|---|
+| ↗ / ↘ | La línea sube / baja |
+| ⤴ / ⤵ | El final va para arriba / para abajo |
+| ～ | Alargar |
+| ➰ | Rulo |
+| ‖ | Respirar |
+| **p** | En piano |
+
+**Piano** va por línea: con el cursor en una línea la marca a ella sola; para
+una estrofa entera, la seleccionás y tocás *piano*. Tocarlo otra vez lo saca.
+En el atril, cada marca sale con su color y las líneas en piano llevan una
+barra violeta al costado.
+
+Las marcas son parte de la letra: viajan con Drive, el respaldo y el `.lrc`, y
+no cambian los tiempos del karaoke. Se borran como cualquier letra.
 
 ## Lista del show
 

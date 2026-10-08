@@ -15,9 +15,12 @@
     --fs: 44px;
     --bg:#0b0d10; --fg:#e8eaed; --dim:#8b93a1; --accent:#ffd54a;
     --panel:#151920; --line:#232833; --danger:#ff6b6b; --ok:#4ade80;
+    /* marcas de canto */
+    --m-sube:#4ade80; --m-baja:#60a5fa; --m-alarga:#fb923c; --m-rulo:#f472b6; --m-resp:#22d3ee; --m-piano:#c084fc;
   }
   :root[data-theme="light"]{
     --bg:#fbfbf8; --fg:#15181d; --dim:#6b7280; --panel:#ffffff; --line:#e4e6ea; --accent:#c2410c;
+    --m-sube:#15803d; --m-baja:#1d4ed8; --m-alarga:#b45309; --m-rulo:#be185d; --m-resp:#0e7490; --m-piano:#7e22ce;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
   html,body{height:100%;margin:0;overscroll-behavior:none}
@@ -69,6 +72,12 @@
   body.plain .ln{opacity:1}
   .sigue{margin:1.4em 0 0; font-size:.42em; font-weight:600; color:var(--dim); cursor:pointer}
   .sigue b{color:var(--fg)}
+  .marca{font-size:1em; font-weight:900; margin:0 .06em}
+  .m-sube{color:var(--m-sube)} .m-baja{color:var(--m-baja)} .m-alarga{color:var(--m-alarga)}
+  .m-rulo{color:var(--m-rulo)} .m-resp{color:var(--m-resp)}
+  .ln.piano{border-left:.1em solid var(--m-piano); padding-left:.35em}
+  .dyn{color:var(--m-piano); font-family:Georgia,"Times New Roman",serif; font-style:italic; font-weight:700; font-size:.75em; margin-right:.3em}
+  #marcas .btn{padding:8px 10px; font-size:15px}
   body.plain .ln.cur{color:var(--accent)}
   #empty{padding:20vh 8vw; text-align:center; color:var(--dim); font-size:18px; line-height:1.6}
 
@@ -232,6 +241,19 @@
   <div class="body">
     <input type="text" id="edTitle" placeholder="Título" autocomplete="off">
     <input type="text" id="edArtist" placeholder="Artista / banda" autocomplete="off">
+    <div class="row" id="marcas">
+      <button class="btn" data-marca="↗"><span class="marca m-sube">↗</span> sube</button>
+      <button class="btn" data-marca="↘"><span class="marca m-baja">↘</span> baja</button>
+      <button class="btn" data-marca="⤴"><span class="marca m-sube">⤴</span> final arriba</button>
+      <button class="btn" data-marca="⤵"><span class="marca m-baja">⤵</span> final abajo</button>
+      <button class="btn" data-marca="～"><span class="marca m-alarga">～</span> alargar</button>
+      <button class="btn" data-marca="➰"><span class="marca m-rulo">➰</span> rulo</button>
+      <button class="btn" data-marca="‖"><span class="marca m-resp">‖</span> respirar</button>
+      <button class="btn" id="btnPiano"><span class="dyn">p</span> piano</button>
+    </div>
+    <p class="hint">Poné el cursor donde va la marca y tocá el botón. <b>Piano</b> va por línea: con el
+    cursor en una línea, la marca sólo a ella; para una estrofa entera, seleccionala y tocá piano. Tocarlo
+    otra vez sobre líneas en piano lo saca.</p>
     <textarea id="edLyrics" placeholder="Pegá la letra acá. Una línea por renglón; los renglones vacíos son pausas."></textarea>
     <p class="hint">Si pegás formato LRC (<code>[00:12.40]</code> al inicio de cada línea) se importan los tiempos solos.</p>
     <hr>
@@ -242,6 +264,10 @@
     </div>
     <p class="hint" id="audioInfo">Sin audio.</p>
     <input type="text" id="edYt" placeholder="…o pegá un link de YouTube (el karaoke, por ejemplo)" autocomplete="off">
+    <div class="row" id="ytDatos" style="display:none">
+      <span class="hint" id="ytDatosTxt" style="flex:1"></span>
+      <button class="btn" id="btnSwap" title="Dar vuelta tema y banda">⇄ Invertir</button>
+    </div>
     <p class="hint">El video se reproduce desde YouTube y el karaoke sigue su tiempo, así que
     podés sincronizar contra él. Necesita internet: si no hay, el tema igual anda con el
     cronómetro interno.</p>
@@ -477,6 +503,31 @@ function toLrc(song){
   }).join('\n');
 }
 
+/* ============ marcas de canto ============ */
+// Van dentro de la letra (song.lines), así viajan solas con Drive, el respaldo, el PIN y el .lrc,
+// y no tocan los tiempos. "(p) " al principio de la línea (después de los [mm:ss] en el editor):
+// en piano. El resto son símbolos puestos justo donde aplican.
+const RE_PIANO=/^\(p\)\s*/i, RE_MARCAS=/[↗⤴↘⤵～➰‖]️?/g;
+const MARCAS={'↗':'sube','⤴':'sube','↘':'baja','⤵':'baja','～':'alarga','➰':'rulo','‖':'resp'};
+function esPiano(t){ return RE_PIANO.test(t||''); }
+function sinMarcas(t){ return t.replace(RE_PIANO,'').replace(RE_MARCAS,''); }
+function pintarLinea(p, txt, i){
+  p.textContent='';
+  if(esPiano(txt)){
+    p.classList.add('piano');
+    txt=txt.replace(RE_PIANO,'');
+    // la "p" va al empezar el tramo en piano, no en cada línea de la estrofa
+    if(!esPiano(cur.lines[i-1])){ const d=document.createElement('span'); d.className='dyn'; d.textContent='p'; p.append(d); }
+  }
+  let ult=0;
+  for(const m of txt.matchAll(RE_MARCAS)){
+    if(m.index>ult) p.append(txt.slice(ult, m.index));
+    const s=document.createElement('span'); s.className='marca m-'+MARCAS[m[0][0]]; s.textContent=m[0][0];
+    p.append(s); ult=m.index+m[0].length;
+  }
+  if(ult<txt.length) p.append(txt.slice(ult));
+}
+
 /* ============ render ============ */
 const stage=$('#stage'), lyrics=$('#lyrics'), empty=$('#empty'), player=$('#player');
 let lineEls=[], active=-1, audioURL=null, introEl=null;
@@ -497,6 +548,7 @@ function render(){
     const p=document.createElement('p');
     p.className='ln'+(txt.trim()?'':' blank');
     p.textContent=txt||' '; p.dataset.i=i;
+    if(txt.trim()) pintarLinea(p, txt, i);
     lyrics.appendChild(p); lineEls.push(p);
   });
   pintarShow(); ajustarFs();
@@ -759,7 +811,7 @@ function renderList(){
   }
   const q=$('#search').value.trim().toLowerCase();
   live()
-    .filter(s=>!q || (s.title+' '+(s.artist||'')+' '+s.lines.join(' ')).toLowerCase().includes(q))
+    .filter(s=>!q || (s.title+' '+(s.artist||'')+' '+s.lines.map(sinMarcas).join(' ')).toLowerCase().includes(q))
     .forEach(s=>box.appendChild(filaTema(s, 0)));
   if(!box.children.length) box.innerHTML='<p class="hint">Nada por acá.</p>';
 }
@@ -866,10 +918,87 @@ function openEdit(song){
   $('#edLyrics').value=song?toLrc(song):'';
   $('#audioInfo').textContent = song && song.audioName ? ('Audio: '+song.audioName) : 'Sin audio.';
   $('#edYt').value = song && song.yt ? ('https://youtu.be/'+song.yt) : '';
+  ytPedido++; ytDatos('');
   ['#btnDelSong','#btnDup','#btnExportLrc'].forEach(s=>$(s).style.display = song?'':'none');
   openS($('#sheetEdit'));
 }
 $('#btnNew').onclick=()=>openEdit(null);
+
+/* ============ título y banda desde el link de YouTube ============ */
+// Se le pregunta a YouTube (oEmbed) sólo al pegar un link; sin internet, se escribe a mano.
+// Sólo completa los campos vacíos: lo que ya se escribió no se pisa.
+let ytPedido=0, ytTimer=0;
+function ytDatos(msg, swap){
+  $('#ytDatos').style.display = msg ? '' : 'none';
+  $('#ytDatosTxt').textContent = msg||'';
+  $('#btnSwap').style.display = swap ? '' : 'none';
+}
+const RUIDO_PAREN=/\s*[\(\[][^\)\]]*\b(official|oficial|video|v[ií]deo|lyrics?|letra|audio|karaoke|visuali[sz]er|hd|4k|remaster(ed)?|instrumental)\b[^\)\]]*[\)\]]/gi;
+const RUIDO_PARTE=/\b(karaoke|karafun|sing king|official|oficial|lyrics?|letra|visuali[sz]er|instrumental|versi[oó]n)\b/i;
+// "Banda - Tema (Official Video)" → {banda, tema}. Sin guion, la banda sale del canal, salvo que sea de karaoke.
+function partirTitulo(titulo, canal){
+  const partes=titulo.replace(RUIDO_PAREN,'').split(/\s+[-–—|]\s+/)
+    .map(s=>s.trim().replace(/^["“‘']+|["”’']+$/g,'')).filter(Boolean);
+  // "Banda - Tema - Karaoke Version from …": lo que sobra al final es ruido
+  while(partes.length>2){
+    let k=-1; for(let i=partes.length-1;i>=0;i--) if(RUIDO_PARTE.test(partes[i])){ k=i; break; }
+    if(k<0) break; partes.splice(k,1);
+  }
+  if(partes.length===2 && RUIDO_PARTE.test(partes[1])) partes.pop();
+  if(partes.length>=2) return {banda:partes[0], tema:partes[1]};
+  const banda = /karaoke|karafun|sing king|lyrics?/i.test(canal) ? ''
+    : canal.replace(/\s*-\s*topic$/i,'').replace(/vevo$/i,'').replace(/\s+(official|oficial)$/i,'').trim();
+  return {banda, tema:partes[0]||titulo};
+}
+function ytResumen(){ const t=$('#edTitle').value, a=$('#edArtist').value; return '«'+t+'»'+(a?' de '+a:''); }
+async function datosDeYt(vid){
+  const n=++ytPedido;
+  if(!vid || ($('#edTitle').value.trim() && $('#edArtist').value.trim())) return ytDatos('');
+  ytDatos('Buscando el nombre del video…');
+  let j;
+  try{
+    const ctl=new AbortController(), t=setTimeout(()=>ctl.abort(), 6000);
+    const r=await fetch('https://www.youtube.com/oembed?format=json&url='+encodeURIComponent('https://www.youtube.com/watch?v='+vid), {signal:ctl.signal});
+    clearTimeout(t);
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    j=await r.json();
+  }catch(e){
+    if(n===ytPedido) ytDatos('No pude leer el nombre del video (¿sin internet?): escribilo a mano.');
+    return;
+  }
+  if(n!==ytPedido) return;  // cambiaron el link o se cerró el editor mientras tanto
+  const d=partirTitulo(j.title||'', j.author_name||'');
+  if(!$('#edTitle').value.trim()) $('#edTitle').value=d.tema;
+  if(!$('#edArtist').value.trim()) $('#edArtist').value=d.banda;
+  ytDatos('Con el video quedó: '+ytResumen()+'. Si está al revés, tocá ⇄.', true);
+}
+$('#edYt').oninput=()=>{ clearTimeout(ytTimer); ytTimer=setTimeout(()=>datosDeYt(idDeYoutube($('#edYt').value)), 400); };
+$('#btnSwap').onclick=()=>{
+  const t=$('#edTitle'), a=$('#edArtist'); [t.value, a.value]=[a.value, t.value];
+  ytDatos('Quedó: '+ytResumen()+'.', true);
+};
+// botones de marcas: no le sacan el foco a la letra, así no se cierra el teclado de la tablet
+document.querySelectorAll('#marcas .btn').forEach(b=>{ b.onpointerdown=b.onmousedown=e=>e.preventDefault(); });
+document.querySelectorAll('#marcas [data-marca]').forEach(b=>b.onclick=()=>{
+  const ta=$('#edLyrics'), fin=ta.selectionEnd;
+  ta.setRangeText(b.dataset.marca, fin, fin, 'end'); ta.focus();
+});
+// piano: a las líneas seleccionadas (o a la del cursor). Si ya estaban todas en piano, lo saca.
+const RE_TIEMPOS=/^\s*(?:\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\])*/;
+$('#btnPiano').onclick=()=>{
+  const ta=$('#edLyrics'), v=ta.value;
+  let a=ta.selectionStart, b=ta.selectionEnd;
+  if(b>a && v[b-1]==='\n') b--;  // una selección que termina al principio de la línea siguiente no la incluye
+  const ini=v.lastIndexOf('\n', a-1)+1;
+  let fin=v.indexOf('\n', b); if(fin<0) fin=v.length;
+  // los [mm:ss] del editor van primero: "(p) " va después, al principio de la letra
+  const partes=v.slice(ini, fin).split('\n').map(l=>{ const t=l.match(RE_TIEMPOS)[0]; return [t, l.slice(t.length)]; });
+  const conLetra=partes.filter(([,r])=>r.trim());
+  if(!conLetra.length) return;
+  const sacar=conLetra.every(([,r])=>esPiano(r));
+  const nuevo=partes.map(([t,r])=> !r.trim() ? t+r : t+(sacar ? r.replace(RE_PIANO,'') : (esPiano(r) ? r : '(p) '+r))).join('\n');
+  ta.setRangeText(nuevo, ini, fin, 'select'); ta.focus();
+};
 $('#btnPickAudio').onclick=()=>$('#audioIn').click();
 $('#audioIn').onchange=e=>{
   const f=e.target.files[0]; if(!f) return;
@@ -1128,7 +1257,7 @@ function ponerYt(vid){
     st.className='status ok'; st.textContent='Listo: «'+cur.title+'» ahora tiene el video de YouTube.';
     return;
   }
-  openEdit(null); $('#edYt').value='https://youtu.be/'+vid;
+  openEdit(null); $('#edYt').value='https://youtu.be/'+vid; datosDeYt(vid);
   st.className='status'; st.textContent='';
 }
 $('#btnImport').onclick=()=>$('#fileIn').click();

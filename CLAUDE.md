@@ -12,8 +12,9 @@ workflow `.github/workflows/pages.yml`. Push a `main` = publicado en ~2 minutos.
   Sin frameworks, sin build, sin `npm install`. Se tiene que poder abrir con
   doble clic y funcionar.
 - **Sin dependencias de red en runtime.** Nada de CDNs: la app arranca en modo
-  avión. La única excepción es la IFrame API de YouTube, que se carga sólo si
-  el tema tiene un link, y si falla la app sigue andando.
+  avión. La única excepción es YouTube: la IFrame API, que se carga sólo si el
+  tema tiene un link, y el oEmbed (`datosDeYt()`), que se consulta sólo al
+  pegar un link para completar título y banda. Si fallan, la app sigue andando.
 - **Español argentino en toda la interfaz**, incluidos los mensajes de error.
 - **Los datos son del usuario y viven en su dispositivo.** No se mandan a
   ningún servidor que no sea el Drive del propio usuario.
@@ -60,6 +61,15 @@ LRC estándar, que el editor muestra y acepta.
 
 El **adelanto** (`prefs.lead`) se aplica al reproducir, no al grabar: así se
 ajusta sin volver a sincronizar.
+
+### Marcas de canto
+
+Van **dentro del texto** de `song.lines`, no en un campo aparte: así viajan con
+Drive, el respaldo, el PIN y el `.lrc` sin tocar el formato. Son símbolos donde
+aplican (`↗ ↘ ⤴ ⤵ ～ ➰ ‖`, ver `MARCAS`) y el prefijo `(p) ` para piano; en el
+editor el prefijo va después de los `[mm:ss.cc]`. `pintarLinea()` las dibuja con
+color, y todo lo que compara letra (la búsqueda) tiene que pasar por
+`sinMarcas()`.
 
 ### Dos líneas siempre a la vista
 
