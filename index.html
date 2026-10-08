@@ -268,6 +268,15 @@
     otra vez sobre líneas en piano lo saca.</p>
     <textarea id="edLyrics" placeholder="Pegá la letra acá. Una línea por renglón; los renglones vacíos son pausas."></textarea>
     <p class="hint">Si pegás formato LRC (<code>[00:12.40]</code> al inicio de cada línea) se importan los tiempos solos.</p>
+    <div class="row">
+      <span class="hint">La 1ª línea arranca en</span>
+      <input type="text" id="edInicio" inputmode="decimal" placeholder="11,3" autocomplete="off" style="width:6em">
+      <span class="hint">s</span>
+      <button class="btn" id="btnCorrer">Correr tiempos</button>
+      <button class="btn" data-correr="-0.5">−0,5 s</button>
+      <button class="btn" data-correr="0.5">+0,5 s</button>
+    </div>
+    <div class="status" id="correrSt"></div>
     <hr>
     <h3>Audio del tema</h3>
     <div class="row">
@@ -505,14 +514,14 @@ function parseLyrics(text){
   while(lines.length && !lines[lines.length-1]) lines.pop();
   return {lines, timings:null};
 }
+// [mm:ss.cc] contando en centésimas enteras: redondeando sólo la fracción, 14,996 s salía "[00:14.100]"
+function fmtLrc(t){
+  const cs=Math.round(Math.max(0,t)*100), pad=(n,w)=>String(n).padStart(w,'0');
+  return '['+pad(Math.floor(cs/6000),2)+':'+pad(Math.floor(cs/100)%60,2)+'.'+pad(cs%100,2)+']';
+}
 function toLrc(song){
   if(!song.timings) return song.lines.join('\n');
-  const pad=(n,w)=>String(n).padStart(w,'0');
-  return song.lines.map((l,i)=>{
-    const t=song.timings[i]; if(t==null) return l;
-    const m=Math.floor(t/60), s=t-m*60;
-    return '['+pad(m,2)+':'+pad(Math.floor(s),2)+'.'+pad(Math.round((s%1)*100),2)+']'+l;
-  }).join('\n');
+  return song.lines.map((l,i)=> song.timings[i]==null ? l : fmtLrc(song.timings[i])+l).join('\n');
 }
 
 /* ============ marcas de canto ============ */
@@ -938,6 +947,7 @@ function openEdit(song){
   $('#edYt').value = song && song.yt ? ('https://youtu.be/'+song.yt) : '';
   ytPedido++; ytDatos('');
   letraPedido++; letraHallada=null; letraUI('');
+  mostrarInicio(); $('#correrSt').textContent='';
   ['#btnDelSong','#btnDup','#btnExportLrc'].forEach(s=>$(s).style.display = song?'':'none');
   openS($('#sheetEdit'));
 }
@@ -1051,11 +1061,46 @@ function pegarLetra(conTiempos){
     : (h.plainLyrics || h.syncedLyrics.replace(/^\s*(\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\])+\s?/gm,''));
   const ta=$('#edLyrics');
   if(ta.value.trim() && !confirm('¿Reemplazar la letra que ya está en el tema?')) return;
-  ta.value=texto.trim();
+  ta.value=texto.trim(); mostrarInicio();
   letraUI(conTiempos ? 'Pegada con tiempos: al guardar queda lista para karaoke. Si quedan corridos, sincronizá tap a tap.'
                      : 'Pegada. Revisala y guardá.');
 }
 $('#btnLetra').onclick=buscarLetra;
+
+/* ============ correr los tiempos ============ */
+// Mueve todos los [mm:ss.cc] del editor lo mismo: para cuando el audio o el video arrancan antes
+// o después que los tiempos (por ejemplo, los de LRCLIB contra un karaoke con otra intro).
+const RE_TIEMPO=/\[(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?\]/g;
+const segDe=(m,s,f)=>parseInt(m,10)*60+parseInt(s,10)+(f?parseFloat('0.'+f):0);
+function tiemposEditor(){ return [...$('#edLyrics').value.matchAll(RE_TIEMPO)].map(x=>segDe(x[1],x[2],x[3])); }
+const coma=x=>x.toFixed(2).replace('.',',');
+function mostrarInicio(){ const T=tiemposEditor(); $('#edInicio').value = T.length ? coma(Math.min(...T)) : ''; }
+function correrTiempos(delta){
+  const st=$('#correrSt'), T=tiemposEditor();
+  if(!T.length){ st.className='status err'; st.textContent='Esta letra no tiene tiempos para correr.'; return; }
+  if(!isFinite(delta) || Math.abs(delta)<0.005) return;
+  const ta=$('#edLyrics'); let topeados=0;
+  ta.value=ta.value.replace(RE_TIEMPO, (_,m,s,f)=>{ const t=segDe(m,s,f)+delta; if(t<0) topeados++; return fmtLrc(t); });
+  mostrarInicio();
+  st.className='status ok';
+  st.textContent='Corrí '+T.length+' tiempos '+coma(Math.abs(delta))+' s para '+(delta<0?'atrás':'adelante')
+    +(topeados ? ' ('+topeados+' quedaron en 0:00)' : '')+'. Guardá para que quede.';
+}
+// "11,3", "11.3" o "0:11,3"
+function leerSegundos(txt){
+  const v=String(txt).trim().replace(',','.'); if(!v) return NaN;
+  const p=v.split(':'); return p.length===2 ? parseInt(p[0],10)*60+parseFloat(p[1]) : parseFloat(v);
+}
+$('#btnCorrer').onclick=()=>{
+  const T=tiemposEditor(), x=leerSegundos($('#edInicio').value);
+  if(T.length && !isFinite(x)){
+    const st=$('#correrSt'); st.className='status err'; st.textContent='Escribí en qué segundo arranca la 1ª línea, por ejemplo 11,3.'; return;
+  }
+  correrTiempos(T.length ? x-Math.min(...T) : 0);
+};
+document.querySelectorAll('[data-correr]').forEach(b=>b.onclick=()=>correrTiempos(parseFloat(b.dataset.correr)));
+// si pegan una letra con tiempos, que el recuadro muestre dónde arranca
+$('#edLyrics').addEventListener('change', mostrarInicio);
 $('#btnLetraTiempos').onclick=()=>pegarLetra(true);
 $('#btnLetraPlana').onclick=()=>pegarLetra(false);
 $('#btnGenius').onclick=()=>{

@@ -91,6 +91,13 @@ También podés importar y exportar `.lrc`, que es el formato estándar de
 karaoke: en el editor de cada tema la letra se ve con sus `[mm:ss.cc]` adelante
 y se corrigen a mano.
 
+**Correr todos los tiempos juntos:** si la letra está bien sincronizada pero
+todo entra antes o después (por ejemplo, tiempos de la grabación original
+contra un video de karaoke con otra intro), en el editor escribí en qué segundo
+arranca la 1ª línea (*La 1ª línea arranca en* `11,3`) y tocá **Correr
+tiempos**: todas las demás se mueven lo mismo. **−0,5 s / +0,5 s** ajustan
+fino. Después, *Guardar*.
+
 ## Marcas de canto
 
 En el editor del tema, arriba de la letra, hay una fila de botones para marcar
