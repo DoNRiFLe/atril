@@ -241,6 +241,15 @@
   <div class="body">
     <input type="text" id="edTitle" placeholder="Título" autocomplete="off">
     <input type="text" id="edArtist" placeholder="Artista / banda" autocomplete="off">
+    <div class="row">
+      <button class="btn" id="btnLetra">🔎 Buscar letra</button>
+      <span class="hint" id="letraInfo" style="flex:1"></span>
+    </div>
+    <div class="row" id="letraOpc" style="display:none">
+      <button class="btn on" id="btnLetraTiempos">Pegar con tiempos</button>
+      <button class="btn" id="btnLetraPlana">Pegar solo la letra</button>
+      <button class="btn" id="btnGenius">Buscar en Genius ↗</button>
+    </div>
     <div class="row" id="marcas">
       <button class="btn" data-marca="↗"><span class="marca m-sube">↗</span> sube</button>
       <button class="btn" data-marca="↘"><span class="marca m-baja">↘</span> baja</button>
@@ -919,6 +928,7 @@ function openEdit(song){
   $('#audioInfo').textContent = song && song.audioName ? ('Audio: '+song.audioName) : 'Sin audio.';
   $('#edYt').value = song && song.yt ? ('https://youtu.be/'+song.yt) : '';
   ytPedido++; ytDatos('');
+  letraPedido++; letraHallada=null; letraUI('');
   ['#btnDelSong','#btnDup','#btnExportLrc'].forEach(s=>$(s).style.display = song?'':'none');
   openS($('#sheetEdit'));
 }
@@ -971,11 +981,77 @@ async function datosDeYt(vid){
   if(!$('#edTitle').value.trim()) $('#edTitle').value=d.tema;
   if(!$('#edArtist').value.trim()) $('#edArtist').value=d.banda;
   ytDatos('Con el video quedó: '+ytResumen()+'. Si está al revés, tocá ⇄.', true);
+  if(!$('#edLyrics').value.trim()) buscarLetra();  // ya se sabe qué tema es: a buscar la letra
 }
 $('#edYt').oninput=()=>{ clearTimeout(ytTimer); ytTimer=setTimeout(()=>datosDeYt(idDeYoutube($('#edYt').value)), 400); };
 $('#btnSwap').onclick=()=>{
   const t=$('#edTitle'), a=$('#edArtist'); [t.value, a.value]=[a.value, t.value];
   ytDatos('Quedó: '+ytResumen()+'.', true);
+  if(!$('#edLyrics').value.trim()) buscarLetra();  // con el orden bien, se vuelve a buscar
+};
+
+/* ============ buscar la letra ============ */
+// En LRCLIB (lrclib.net), una base abierta de letras, muchas con tiempos. Si no está, se abre la
+// búsqueda de Genius para copiarla a mano: Genius no deja leer sus letras desde otra página.
+let letraPedido=0, letraHallada=null;
+function letraUI(msg, o){
+  o=o||{};
+  $('#letraInfo').textContent=msg||'';
+  $('#letraOpc').style.display = (o.tiempos||o.plana||o.genius) ? '' : 'none';
+  $('#btnLetraTiempos').style.display = o.tiempos ? '' : 'none';
+  $('#btnLetraPlana').style.display = o.plana ? '' : 'none';
+  $('#btnGenius').style.display = o.genius ? '' : 'none';
+}
+async function buscarLetra(){
+  const n=++letraPedido, tema=$('#edTitle').value.trim(), banda=$('#edArtist').value.trim();
+  letraHallada=null;
+  if(!tema) return letraUI('Poné el título (y mejor la banda) para buscar la letra.');
+  letraUI('Buscando la letra…');
+  let lista, ocupado=false;
+  try{
+    const q='track_name='+encodeURIComponent(tema)+(banda ? '&artist_name='+encodeURIComponent(banda) : '');
+    // si LRCLIB contesta "ocupado" (503/429), un reintento al rato; si sigue, se avisa eso y no "sin internet"
+    for(let intento=0; intento<2; intento++){
+      const ctl=new AbortController(), t=setTimeout(()=>ctl.abort(), 8000);
+      const r=await fetch('https://lrclib.net/api/search?'+q, {signal:ctl.signal});
+      clearTimeout(t);
+      ocupado = r.status===503 || r.status===429;
+      if(ocupado && intento===0){ await new Promise(s=>setTimeout(s, 1500)); if(n!==letraPedido) return; continue; }
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      lista=await r.json(); break;
+    }
+  }catch(e){
+    if(n===letraPedido) letraUI(ocupado ? 'LRCLIB está ocupado ahora: probá de nuevo en un rato.' : 'No pude buscar la letra (¿sin internet?).', {genius:true});
+    return;
+  }
+  if(n!==letraPedido) return;  // cambiaron el tema o se cerró el editor mientras tanto
+  const hay=(Array.isArray(lista)?lista:[]).filter(x=>!x.instrumental && (x.syncedLyrics||x.plainLyrics));
+  // el primero es el que mejor coincide; si no trae tiempos, otra versión del mismo tema que sí
+  const igual=(a,b)=>(a||'').trim().toLowerCase()===(b||'').trim().toLowerCase();
+  let h=hay[0];
+  if(h && !h.syncedLyrics) h=hay.find(x=>x.syncedLyrics && igual(x.trackName,h.trackName) && igual(x.artistName,h.artistName)) || h;
+  if(!h) return letraUI('No la encontré en LRCLIB.', {genius:true});
+  letraHallada=h;
+  letraUI('Encontrada: «'+h.trackName+'» de '+h.artistName
+    +(h.syncedLyrics ? ', con los tiempos de la grabación original.' : ', sin tiempos.'),
+    {tiempos:!!h.syncedLyrics, plana:true, genius:true});
+}
+function pegarLetra(conTiempos){
+  const h=letraHallada; if(!h) return;
+  const texto = conTiempos ? h.syncedLyrics
+    : (h.plainLyrics || h.syncedLyrics.replace(/^\s*(\[\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?\])+\s?/gm,''));
+  const ta=$('#edLyrics');
+  if(ta.value.trim() && !confirm('¿Reemplazar la letra que ya está en el tema?')) return;
+  ta.value=texto.trim();
+  letraUI(conTiempos ? 'Pegada con tiempos: al guardar queda lista para karaoke. Si quedan corridos, sincronizá tap a tap.'
+                     : 'Pegada. Revisala y guardá.');
+}
+$('#btnLetra').onclick=buscarLetra;
+$('#btnLetraTiempos').onclick=()=>pegarLetra(true);
+$('#btnLetraPlana').onclick=()=>pegarLetra(false);
+$('#btnGenius').onclick=()=>{
+  const q=[$('#edArtist').value, $('#edTitle').value].join(' ').trim();
+  window.open('https://genius.com/search?q='+encodeURIComponent(q), '_blank', 'noopener');
 };
 // botones de marcas: no le sacan el foco a la letra, así no se cierra el teclado de la tablet
 document.querySelectorAll('#marcas .btn').forEach(b=>{ b.onpointerdown=b.onmousedown=e=>e.preventDefault(); });

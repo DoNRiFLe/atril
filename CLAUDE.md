@@ -12,9 +12,15 @@ workflow `.github/workflows/pages.yml`. Push a `main` = publicado en ~2 minutos.
   Sin frameworks, sin build, sin `npm install`. Se tiene que poder abrir con
   doble clic y funcionar.
 - **Sin dependencias de red en runtime.** Nada de CDNs: la app arranca en modo
-  avión. La única excepción es YouTube: la IFrame API, que se carga sólo si el
-  tema tiene un link, y el oEmbed (`datosDeYt()`), que se consulta sólo al
-  pegar un link para completar título y banda. Si fallan, la app sigue andando.
+  avión. Las únicas excepciones, todas a pedido y sin las que la app sigue
+  andando:
+  - YouTube: la IFrame API, que se carga sólo si el tema tiene un link, y el
+    oEmbed (`datosDeYt()`), que se consulta al pegar un link para completar
+    título y banda.
+  - LRCLIB (`buscarLetra()`): con *Buscar letra*, o sola después de completar
+    con YouTube si la letra está vacía. Le llegan el título y la banda, nada
+    más. Genius no deja leer sus letras desde otra página (ni sus términos
+    permiten sacarlas): sólo se abre su búsqueda en el navegador.
 - **Español argentino en toda la interfaz**, incluidos los mensajes de error.
 - **Los datos son del usuario y viven en su dispositivo.** No se mandan a
   ningún servidor que no sea el Drive del propio usuario.

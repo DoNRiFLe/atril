@@ -59,6 +59,21 @@ solo con el nombre del video (sacando lo de "Official Video", "Karaoke
 Version" y parecidos). Algunos canales ponen el tema antes que la banda: si
 quedó al revés, **⇄ Invertir**. Lo que ya escribiste no lo toca.
 
+### Buscar la letra
+
+**🔎 Buscar letra** la busca en [LRCLIB](https://lrclib.net), una base abierta
+de letras, con el título y la banda del tema. Si pegaste un link de YouTube y
+la letra está vacía, la busca sola. Cuando la encuentra elegís:
+
+- **Pegar con tiempos**: queda lista para karaoke. Los tiempos son los de la
+  grabación original; con un video de karaoke con otra intro o tocando en vivo
+  pueden quedar corridos, y se ajustan con el tap a tap.
+- **Pegar solo la letra**.
+
+Si no está, **Buscar en Genius** abre la búsqueda en el navegador para copiarla
+a mano. Al buscar, a LRCLIB le llegan sólo el título y la banda. Las letras
+tienen derechos de autor: son para usarlas vos, no para publicarlas.
+
 ## Ponerle los tiempos
 
 **Con el audio cargado**, ⚙ → *Sincronizar tap a tap*: el primer toque arranca
