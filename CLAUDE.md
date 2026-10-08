@@ -73,9 +73,10 @@ ajusta sin volver a sincronizar.
 Van **dentro del texto** de `song.lines`, no en un campo aparte: así viajan con
 Drive, el respaldo, el PIN y el `.lrc` sin tocar el formato. Son símbolos donde
 aplican (`↗ ↘ ⤴ ⤵ ～ ➰ ‖`, ver `MARCAS`) y el prefijo `(p) ` para piano; en el
-editor el prefijo va después de los `[mm:ss.cc]`. `pintarLinea()` las dibuja con
-color, y todo lo que compara letra (la búsqueda) tiene que pasar por
-`sinMarcas()`.
+editor el prefijo va después de los `[mm:ss.cc]`. Las escaleritas son de tres
+caracteres (`▁▃▅` / `▅▃▁`) y en el atril se dibujan con un SVG (`ESCALERA`):
+como texto salían como barras pesadas. `pintarLinea()` las dibuja con color, y
+todo lo que compara letra (la búsqueda) tiene que pasar por `sinMarcas()`.
 
 ### Dos líneas siempre a la vista
 

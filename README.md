@@ -99,6 +99,7 @@ cómo se canta cada parte. Ponés el cursor justo donde va y tocás la marca:
 | | |
 |---|---|
 | ↗ / ↘ | La línea sube / baja |
+| Escalerita arriba / abajo | Sube / baja escalonado, nota por nota |
 | ⤴ / ⤵ | El final va para arriba / para abajo |
 | ～ | Alargar |
 | ➰ | Rulo |

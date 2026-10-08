@@ -73,6 +73,7 @@
   .sigue{margin:1.4em 0 0; font-size:.42em; font-weight:600; color:var(--dim); cursor:pointer}
   .sigue b{color:var(--fg)}
   .marca{font-size:1em; font-weight:900; margin:0 .06em}
+  .marca svg{width:.95em; height:.85em; vertical-align:-.04em; fill:none; stroke:currentColor; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round}
   .m-sube{color:var(--m-sube)} .m-baja{color:var(--m-baja)} .m-alarga{color:var(--m-alarga)}
   .m-rulo{color:var(--m-rulo)} .m-resp{color:var(--m-resp)}
   .ln.piano{border-left:.1em solid var(--m-piano); padding-left:.35em}
@@ -253,6 +254,8 @@
     <div class="row" id="marcas">
       <button class="btn" data-marca="↗"><span class="marca m-sube">↗</span> sube</button>
       <button class="btn" data-marca="↘"><span class="marca m-baja">↘</span> baja</button>
+      <button class="btn" data-marca="▁▃▅"><span class="marca m-sube"><svg viewBox="0 0 16 15" aria-hidden="true"><path d="M1 13H5V9H9V5H13V1"/></svg></span> escalera arriba</button>
+      <button class="btn" data-marca="▅▃▁"><span class="marca m-baja"><svg viewBox="0 0 16 15" aria-hidden="true"><path d="M1 1H5V5H9V9H13V13"/></svg></span> escalera abajo</button>
       <button class="btn" data-marca="⤴"><span class="marca m-sube">⤴</span> final arriba</button>
       <button class="btn" data-marca="⤵"><span class="marca m-baja">⤵</span> final abajo</button>
       <button class="btn" data-marca="～"><span class="marca m-alarga">～</span> alargar</button>
@@ -516,8 +519,11 @@ function toLrc(song){
 // Van dentro de la letra (song.lines), así viajan solas con Drive, el respaldo, el PIN y el .lrc,
 // y no tocan los tiempos. "(p) " al principio de la línea (después de los [mm:ss] en el editor):
 // en piano. El resto son símbolos puestos justo donde aplican.
-const RE_PIANO=/^\(p\)\s*/i, RE_MARCAS=/[↗⤴↘⤵～➰‖]️?/g;
-const MARCAS={'↗':'sube','⤴':'sube','↘':'baja','⤵':'baja','～':'alarga','➰':'rulo','‖':'resp'};
+const RE_PIANO=/^\(p\)\s*/i, RE_MARCAS=/▁▃▅|▅▃▁|[↗⤴↘⤵～➰‖]️?/g;
+// las escaleritas (subir o bajar nota por nota) son de tres caracteres; el resto, de uno
+const MARCAS={'↗':'sube','⤴':'sube','▁▃▅':'sube','↘':'baja','⤵':'baja','▅▃▁':'baja','～':'alarga','➰':'rulo','‖':'resp'};
+const escalon=d=>'<svg viewBox="0 0 16 15" aria-hidden="true"><path d="'+d+'"/></svg>';
+const ESCALERA={'▁▃▅':escalon('M1 13H5V9H9V5H13V1'), '▅▃▁':escalon('M1 1H5V5H9V9H13V13')};
 function esPiano(t){ return RE_PIANO.test(t||''); }
 function sinMarcas(t){ return t.replace(RE_PIANO,'').replace(RE_MARCAS,''); }
 function pintarLinea(p, txt, i){
@@ -531,7 +537,10 @@ function pintarLinea(p, txt, i){
   let ult=0;
   for(const m of txt.matchAll(RE_MARCAS)){
     if(m.index>ult) p.append(txt.slice(ult, m.index));
-    const s=document.createElement('span'); s.className='marca m-'+MARCAS[m[0][0]]; s.textContent=m[0][0];
+    const k=m[0].replace(/️$/,'');
+    const s=document.createElement('span'); s.className='marca m-'+MARCAS[k];
+    // las escaleritas se dibujan: con caracteres de bloque salen como barras pesadas
+    if(ESCALERA[k]) s.innerHTML=ESCALERA[k]; else s.textContent=k;
     p.append(s); ult=m.index+m[0].length;
   }
   if(ult<txt.length) p.append(txt.slice(ult));
