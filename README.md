@@ -73,7 +73,9 @@ y se corrigen a mano.
 ## Lista del show
 
 **☰ → Todos los temas**: tocá **+** en cada tema, en el orden del show. En
-**Lista del show** los reordenás arrastrando desde **≡** y los sacás con **−**.
+**Lista del show** los movés de a un lugar con **▲ ▼** (o arrastrando desde
+**≡**) y los sacás con **−**. En *Todos los temas*, **🗑** borra el tema, con
+confirmación.
 
 Si el tema que estás viendo es del show, ⏮ ⏭ (y el pedal) siguen ese orden;
 arriba dice en cuál vas (*show 3/12*) y al final de la letra, cuál sigue.

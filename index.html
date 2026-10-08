@@ -129,6 +129,8 @@
   .song .handle{touch-action:none; cursor:grab; user-select:none; color:var(--dim); font-size:24px; line-height:1; padding:8px 6px; margin:-8px 0 -8px -4px}
   .song .num{min-width:1.4em; text-align:right; color:var(--dim); font-variant-numeric:tabular-nums}
   .song.drag{opacity:.8; border-color:var(--accent); box-shadow:0 6px 20px rgba(0,0,0,.35)}
+  .song.movido{box-shadow:0 0 0 2px var(--accent) inset}
+  .song .borrar{color:var(--danger)}
   input[type=text], input[type=password], textarea{
     width:100%; background:var(--panel); color:var(--fg); border:1px solid var(--line);
     border-radius:10px; padding:12px; font:inherit; font-size:16px;
@@ -747,8 +749,12 @@ function renderList(){
   $('#showTools').style.display = tab==='show' && S.length ? '' : 'none';
   const box=$('#songs'); box.innerHTML='';
   if(tab==='show'){
-    S.forEach((s,i)=>box.appendChild(filaTema(s, i+1)));
-    if(!S.length) box.innerHTML='<p class="hint">La lista del show está vacía. En <b>Todos los temas</b>, tocá <b>+</b> en cada uno, en el orden en que los van a tocar. Después los acomodás arrastrando desde <b>≡</b>.</p>';
+    S.forEach((s,i)=>box.appendChild(filaTema(s, i+1, S.length)));
+    if(!S.length) box.innerHTML='<p class="hint">La lista del show está vacía. En <b>Todos los temas</b>, tocá <b>+</b> en cada uno, en el orden en que los van a tocar. Después los acomodás con <b>▲ ▼</b> o arrastrando desde <b>≡</b>.</p>';
+    // el que se acaba de mover queda marcado y a la vista, para seguirlo
+    const m=movido && box.querySelector('.song[data-id="'+movido+'"]');
+    if(m){ m.classList.add('movido'); m.scrollIntoView({block:'nearest'}); }
+    movido=null;
     return;
   }
   const q=$('#search').value.trim().toLowerCase();
@@ -757,8 +763,9 @@ function renderList(){
     .forEach(s=>box.appendChild(filaTema(s, 0)));
   if(!box.children.length) box.innerHTML='<p class="hint">Nada por acá.</p>';
 }
-// n: el número en la lista del show, o 0 en la de todos los temas
-function filaTema(s, n){
+let movido=null;
+// n: el número en la lista del show (de total), o 0 en la de todos los temas
+function filaTema(s, n, total){
   const d=document.createElement('div'); d.className='song'+(s===cur?' actual':''); d.dataset.id=s.id;
   const boton=(txt, titulo, clase, fn)=>{
     const b=document.createElement('button'); b.className=clase; b.textContent=txt; b.title=titulo;
@@ -779,10 +786,22 @@ function filaTema(s, n){
   if(s.audioName){ const t=document.createElement('span'); t.className='tag'; t.textContent='🎵'; d.appendChild(t); }
   if(s.yt){ const t=document.createElement('span'); t.className='tag'; t.textContent='YT'; d.appendChild(t); }
   const enShow=data.show.ids.includes(s.id), sacar=()=>{ setShow(data.show.ids.filter(id=>id!==s.id)); renderList(); };
-  if(n) d.appendChild(boton('−', 'Sacar de la lista del show', 'btn ghost', sacar));
+  if(n){
+    // un lugar para arriba o para abajo, sin tener que sacar y volver a poner
+    const mover=dir=>{
+      const ids=showList().map(x=>x.id), k=ids.indexOf(s.id), j=k+dir;
+      if(k<0 || j<0 || j>=ids.length) return;
+      [ids[k], ids[j]]=[ids[j], ids[k]];
+      setShow(ids); movido=s.id; renderList();
+    };
+    const sube=boton('▲', 'Subir un lugar', 'btn ghost', ()=>mover(-1)); sube.disabled = n===1;
+    const baja=boton('▼', 'Bajar un lugar', 'btn ghost', ()=>mover(1)); baja.disabled = n===total;
+    d.append(sube, baja, boton('−', 'Sacar de la lista del show', 'btn ghost', sacar));
+  }
   else if(enShow) d.appendChild(boton('✓', 'Está en la lista del show: tocá para sacarlo', 'btn on', sacar));
   else d.appendChild(boton('+', 'Agregar al final de la lista del show', 'btn', ()=>{ setShow(data.show.ids.concat(s.id)); renderList(); }));
   d.appendChild(boton('✎', 'Editar', 'btn ghost', ()=>openEdit(s)));
+  if(!n) d.appendChild(boton('🗑', 'Borrar el tema', 'btn ghost borrar', ()=>borrarTema(s)));
   m.onclick=()=>{ cur=s; render(); savePrefs(); closeS($('#sheetList')); };
   return d;
 }
@@ -876,13 +895,18 @@ $('#btnSaveSong').onclick=async ()=>{
   if(cur===s) render();
   if(gcfg.token && gcfg.audio && pendingAudio && pendingAudio!=='none') gPushAudio(s).catch(()=>{});
 };
-$('#btnDelSong').onclick=async ()=>{
-  if(!editing || !confirm('¿Borrar "'+editing.title+'"?')) return;
-  editing.deleted=true; editing.lines=[]; editing.timings=null; editing.updatedAt=now();
-  await idbDel(editing.id).catch(()=>{});
-  if(cur===editing) cur=live()[0]||null;
-  saveData(true); render(); renderList(); closeS($('#sheetEdit'));
-};
+// desde la lista o desde el editor, siempre con confirmación. Queda un tombstone para que el
+// borrado llegue a los otros dispositivos en vez de volver a aparecer al sincronizar.
+async function borrarTema(s){
+  if(!confirm('¿Borrar «'+s.title+'»?\n\nNo se puede deshacer'
+      +(gcfg.clientId ? ', y se borra también en tus otros dispositivos cuando sincronicen.' : '.'))) return false;
+  s.deleted=true; s.lines=[]; s.timings=null; s.updatedAt=now();
+  await idbDel(s.id).catch(()=>{});
+  if(cur===s) cur=live()[0]||null;
+  saveData(true); render(); renderList();
+  return true;
+}
+$('#btnDelSong').onclick=async ()=>{ if(editing && await borrarTema(editing)) closeS($('#sheetEdit')); };
 $('#btnDup').onclick=()=>{
   if(!editing) return;
   const c=JSON.parse(JSON.stringify(editing));
