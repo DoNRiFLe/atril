@@ -110,7 +110,13 @@
   /* tocando el show o en pantalla completa: barra grande, para usarla sin mirar; en el show, sin velocidad */
   #btnPlay2{display:none; flex:1 1 auto; justify-content:center}
   body.show #btnPlay2, body.zen #btnPlay2{display:inline-flex; font-size:30px}
+  .aviso{display:flex; align-items:center; gap:10px; flex:0 0 auto; padding:8px 12px; background:var(--accent); color:#111; font-weight:700}
+  .aviso .btn{background:#111; color:#fff; border-color:#111}
+  .aviso .btn.ghost{background:none; color:#111}
   body.show #speedBox{display:none}
+  /* en el show, los temas sin karaoke ni audio (autoscroll) tienen 🐢 / 🐇 grandes en vez del deslizador */
+  #velShow{display:none; flex:0 0 auto}
+  body.show:not(.conlinea):not(.hasaudio) #velShow{display:flex}
   body.show footer, body.zen footer{padding:10px 12px; gap:10px}
   body.show footer .btn, body.zen footer .btn{font-size:24px; padding:16px 20px; border-radius:14px}
   body.show footer .clock, body.zen footer .clock{font-size:20px}
@@ -169,6 +175,11 @@
 </head>
 <body>
 
+<div id="avisoVersion" class="aviso" style="display:none">
+  <span style="flex:1">Hay una versión nueva del Atril.</span>
+  <button class="btn" id="btnActualizar">Actualizar</button>
+  <button class="btn ghost" id="btnAvisoNo" title="Ahora no">✕</button>
+</div>
 <header>
   <button class="btn ghost" id="btnList" title="Temas">☰</button>
   <div class="title"><span id="hTitle">—</span><small id="hArtist"></small></div>
@@ -189,6 +200,11 @@
   <div class="ctlbox" id="speedBox">
     <label>Vel</label>
     <input type="range" id="speed" min="5" max="160" value="45">
+  </div>
+  <div class="ctlbox" id="velShow">
+    <button class="btn" id="btnLento" title="Más lento">🐢</button>
+    <span class="clock" id="velVal">45</span>
+    <button class="btn" id="btnRapido" title="Más rápido">🐇</button>
   </div>
   <div class="ctlbox" id="audioBox">
     <input type="range" id="seekbar" min="0" max="1000" value="0">
@@ -212,6 +228,7 @@
   <header>
     <button class="btn ghost" data-close>✕</button>
     <div class="title">Temas</div>
+    <button class="btn" id="btnFull" title="Pantalla completa: sin pestañas ni barra del navegador">⛶</button>
     <button class="btn" id="btnCloudSync" title="Sincronizar con Drive">☁</button>
     <button class="btn" id="btnNew">+ Nuevo</button>
   </header>
@@ -321,6 +338,7 @@
     <div class="row"><b style="flex:1">Atenuar líneas inactivas</b><button class="btn" id="btnDim">—</button></div>
     <div class="row"><b style="flex:1">Pantalla siempre encendida</b><button class="btn" id="btnWake">—</button></div>
     <div><b>Sin internet</b><div class="status" id="offInfo"></div></div>
+    <div class="row"><b style="flex:1">Versión</b><span class="clock" id="verInfo">—</span></div>
 
     <hr>
     <h3>Karaoke</h3>
@@ -580,7 +598,7 @@ function render(){
     if(txt.trim()) pintarLinea(p, txt, i);
     lyrics.appendChild(p); lineEls.push(p);
   });
-  pintarShow(); ajustarFs();
+  pintarShow(); ajustarFs(); pintarVelocidad();
   stage.scrollTop=0; clock=0; updateClock(); highlight(-1); centrar(false);
   loadAudio();
 }
@@ -748,8 +766,8 @@ function setPlaying(v){
   playing=v; pintarPlay();
   if(esYt()){ try{ v ? yt.playVideo() : yt.pauseVideo(); }catch(e){} }
   else if(audioURL){ if(v) player.play().catch(()=>{}); else player.pause(); }
-  if(v){ lastTs=performance.now(); scrollAcc=0; if(!rafId) rafId=requestAnimationFrame(tick); wakeOn(); }
-  else wakeOff();
+  if(v){ lastTs=performance.now(); scrollAcc=0; if(!rafId) rafId=requestAnimationFrame(tick); }
+  wakeSegun();
   // sincronizando, el botón grande tiene que decir si sigue o está en pausa (p. ej. si se pausó el video)
   if(document.body.classList.contains('syncing')) actualizarTapLabel();
 }
@@ -773,7 +791,7 @@ function tick(ts){
     highlight(i); textoIntro();
     if(!hasAudio() && i>=T.length-1 && clock>T[T.length-1]+8) setPlaying(false);
   } else if(!hasAudio()){
-    scrollAcc += (prefs.speed/2) * dt;
+    scrollAcc += (velocidad()/2) * dt;
     const px=Math.floor(scrollAcc);
     if(px>0){ scrollAcc-=px; stage.scrollTop+=px; }
     if(stage.scrollTop + stage.clientHeight >= stage.scrollHeight-2) setPlaying(false);
@@ -800,20 +818,25 @@ function resetAll(){
 }
 
 /* ============ wake lock ============ */
+// "Pantalla siempre encendida": mientras la app está a la vista, no sólo mientras corre un tema.
+// Entre tema y tema (en el show, mientras la banda charla) la tablet no se tiene que bloquear.
 let wl=null;
 async function wakeOn(){
   if(!prefs.wake || wl || !('wakeLock' in navigator)) return;
   try{ wl = await navigator.wakeLock.request('screen'); wl.addEventListener('release',()=>{wl=null;}); }catch(e){}
 }
 function wakeOff(){ if(wl){ try{wl.release();}catch(e){} wl=null; } }
-document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible' && playing) wakeOn(); });
+function wakeSegun(){ if(prefs.wake && document.visibilityState==='visible') wakeOn(); else wakeOff(); }
+document.addEventListener('visibilitychange', wakeSegun);
+// si el sistema la soltó (ahorro de batería, por ejemplo), se vuelve a pedir con el próximo toque
+document.addEventListener('pointerdown', ()=>{ if(prefs.wake && !wl) wakeOn(); }, {passive:true});
 
 /* ============ prefs ============ */
 function applyPrefs(){
   ajustarFs();
   document.documentElement.dataset.theme = prefs.theme;
   atenuar();
-  $('#speed').value=prefs.speed; $('#fsRange').value=prefs.fs;
+  pintarVelocidad(); $('#fsRange').value=prefs.fs;
   $('#leadRange').value=Math.round(prefs.lead*100); $('#leadVal').textContent=prefs.lead.toFixed(2)+'s';
   $('#btnDim').textContent = prefs.dim?'Sí':'No'; $('#btnDim').classList.toggle('on',prefs.dim);
   $('#btnWake').textContent = prefs.wake?'Sí':'No'; $('#btnWake').classList.toggle('on',prefs.wake);
@@ -1412,7 +1435,8 @@ $('#fileIn').onchange=async e=>{
         for(const s of list){
           if(!s || !Array.isArray(s.lines) || s.deleted) continue;
           data.songs.push({id:uid(), title:s.title||'Sin título', artist:s.artist||'', lines:s.lines,
-                           timings:s.timings||null, audioName:null, deleted:false, updatedAt:now()});
+                           timings:s.timings||null, yt:s.yt||null, speed:s.speed||null,
+                           audioName:null, deleted:false, updatedAt:now()});
           n++;
         }
         toast('Importados '+n+' temas.');
@@ -1754,11 +1778,25 @@ $('#btnList').onclick=()=>{
 };
 $('#btnCfg').onclick=()=>{ applyPrefs(); $('#gClientId').value=gcfg.clientId; ctlInfo(); offInfo(); openS($('#sheetCfg')); };
 $('#search').oninput=renderList;
-$('#speed').oninput=e=>{ prefs.speed=+e.target.value; savePrefs(); };
+/* velocidad del autoscroll: la de cada tema (se ajusta en el ensayo y queda guardada), o la general */
+function velocidad(){ return (cur && cur.speed) || prefs.speed; }
+function pintarVelocidad(){ const v=velocidad(); $('#speed').value=v; $('#velVal').textContent=v; }
+let velTimer=0;
+function setVelocidad(v){
+  v=Math.max(5, Math.min(160, Math.round(v)));
+  prefs.speed=v; savePrefs();  // también queda como la general, para los temas que todavía no tienen la suya
+  if(cur){ cur.speed=v; cur.updatedAt=now(); }
+  pintarVelocidad();
+  // se guarda (y viaja a Drive) cuando se deja de mover, no en cada paso del deslizador
+  clearTimeout(velTimer); velTimer=setTimeout(()=>saveData(true), 800);
+}
+$('#speed').oninput=e=>setVelocidad(+e.target.value);
+$('#btnLento').onclick=()=>setVelocidad(velocidad()-5);
+$('#btnRapido').onclick=()=>setVelocidad(velocidad()+5);
 $('#fsRange').oninput=e=>setFs(+e.target.value);
 $('#leadRange').oninput=e=>{ prefs.lead=(+e.target.value)/100; applyPrefs(); if(isKaraoke()) seek(clock); };
 $('#btnDim').onclick=()=>{ prefs.dim=!prefs.dim; applyPrefs(); };
-$('#btnWake').onclick=()=>{ prefs.wake=!prefs.wake; if(!prefs.wake) wakeOff(); else if(playing) wakeOn(); applyPrefs(); };
+$('#btnWake').onclick=()=>{ prefs.wake=!prefs.wake; wakeSegun(); applyPrefs(); };
 document.querySelectorAll('[data-theme-set]').forEach(b=>b.onclick=()=>{ prefs.theme=b.dataset.themeSet; applyPrefs(); });
 function step(d){
   const L=orden(); if(!L.length) return;
@@ -1770,17 +1808,41 @@ $('#btnPrevSong').onclick=()=>step(-1);
 $('#btnYt').onclick=()=>document.body.classList.toggle('ytmin');
 $('#ytHide').onclick=e=>{ e.stopPropagation(); document.body.classList.add('ytmin'); };
 // pantalla completa: se va la barra de arriba, la de abajo queda (grande) con un "Salir"
+// zenFull: la pantalla completa del navegador la pidió el modo zen. Si ya estaba (puesta desde la
+// lista de temas), salir del zen no la saca: vuelve la barra de la app, pero no las pestañas.
+let zenFull=false;
 function setZen(on){
   document.body.classList.toggle('zen', on);
   $('#btnZen').textContent = on ? '✕ Salir' : '⛶';
   try{
-    if(on && !document.fullscreenElement && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(()=>{});
-    else if(!on && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(()=>{});
+    if(on && !document.fullscreenElement && document.documentElement.requestFullscreen){
+      zenFull=true; document.documentElement.requestFullscreen().catch(()=>{ zenFull=false; });
+    }
+    else if(!on && zenFull && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(()=>{});
   }catch(e){}
+  if(!on) zenFull=false;
 }
 $('#btnZen').onclick=()=>setZen(!document.body.classList.contains('zen'));
-// si sale de pantalla completa con el gesto de atrás, que vuelva la barra de arriba
-document.addEventListener('fullscreenchange',()=>{ if(!document.fullscreenElement && document.body.classList.contains('zen')) setZen(false); });
+// pantalla completa del navegador desde la lista: sin pestañas ni barra de direcciones, con la barra de la app
+function pintarFull(){
+  const on=!!document.fullscreenElement;
+  $('#btnFull').classList.toggle('on', on);
+  $('#btnFull').title = on ? 'Salir de pantalla completa' : 'Pantalla completa: sin pestañas ni barra del navegador';
+}
+$('#btnFull').onclick=()=>{
+  const noDeja=()=>{ const st=$('#impStatus'); st.className='status err';
+    st.textContent='El navegador no dejó poner pantalla completa. Instalá el Atril como app (menú del navegador → Instalar / Agregar a pantalla de inicio): abre sin pestañas.'; };
+  try{
+    if(document.fullscreenElement){ document.exitFullscreen().catch(()=>{}); return; }
+    if(document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(noDeja);
+    else noDeja();
+  }catch(e){ noDeja(); }
+};
+document.addEventListener('fullscreenchange',()=>{
+  pintarFull();
+  // si sale de pantalla completa con el gesto de atrás, que vuelva la barra de arriba
+  if(!document.fullscreenElement && document.body.classList.contains('zen')) setZen(false);
+});
 
 stage.addEventListener('click', e=>{
   if(document.body.classList.contains('syncing')){
@@ -1868,8 +1930,8 @@ document.addEventListener('keydown',e=>{
     return;
   }
   if(k===' '||k==='Enter'){ e.preventDefault(); document.body.classList.contains('syncing')? $('#syncTap').click() : setPlaying(!playing); }
-  else if(k==='ArrowUp'){ e.preventDefault(); prefs.speed=Math.min(160,prefs.speed+5); applyPrefs(); }
-  else if(k==='ArrowDown'){ e.preventDefault(); prefs.speed=Math.max(5,prefs.speed-5); applyPrefs(); }
+  else if(k==='ArrowUp'){ e.preventDefault(); setVelocidad(velocidad()+5); }
+  else if(k==='ArrowDown'){ e.preventDefault(); setVelocidad(velocidad()-5); }
   else if(k==='ArrowRight'){ e.preventDefault(); (isKaraoke()||hasAudio())? seek(clock+5) : (stage.scrollTop+=stage.clientHeight*0.4); }
   else if(k==='ArrowLeft'){ e.preventDefault(); $('#btnBack').click(); }
   else if(k==='+'||k==='='){ setFs(fsEf+4); }
@@ -1890,6 +1952,30 @@ if(window.ResizeObserver){
 if('serviceWorker' in navigator && location.protocol.startsWith('http')){
   navigator.serviceWorker.register('atril-sw.js').catch(()=>{});
 }
+wakeSegun();
+
+/* versión: el número del CACHE de atril-sw.js ('atril-vN'). Una app que quedó abierta no se entera
+   sola de que se publicó otra: se fija al volver a la pantalla, al recuperar internet y cada 15 min. */
+let versionApp=null;
+async function versionPublicada(){
+  try{ const r=await fetch('atril-sw.js', {cache:'no-store'}); const m=(await r.text()).match(/CACHE\s*=\s*'atril-v(\d+)'/); return m ? +m[1] : null; }
+  catch(e){ return null; }
+}
+async function versionGuardada(){
+  try{ const v=(await caches.keys()).map(k=>/^atril-v(\d+)$/.exec(k)).filter(Boolean).map(m=>+m[1]); return v.length ? Math.max(...v) : null; }
+  catch(e){ return null; }
+}
+async function chequearVersion(){
+  const v=await versionPublicada();
+  if(versionApp==null){ versionApp = v!=null ? v : await versionGuardada(); $('#verInfo').textContent = versionApp!=null ? versionApp : '—'; return; }
+  if(v!=null && v>versionApp) $('#avisoVersion').style.display='';
+}
+$('#btnActualizar').onclick=()=>location.reload();
+$('#btnAvisoNo').onclick=()=>{ $('#avisoVersion').style.display='none'; };
+setTimeout(chequearVersion, 2000);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState==='visible') chequearVersion(); });
+window.addEventListener('online', chequearVersion);
+setInterval(()=>{ if(document.visibilityState==='visible') chequearVersion(); }, 15*60000);
 if(location.protocol==='file:'){
   $('#gWarn').innerHTML='<b style="color:var(--danger)">Ojo:</b> abriste el archivo con <code>file://</code>. Google no permite login desde ahí — subilo a una URL (Vercel, Cloudflare Pages, GitHub Pages) o servilo por <code>http://localhost</code> para usar Drive.';
 }

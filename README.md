@@ -144,9 +144,19 @@ arriba dice en cuál vas (*show 3/12*) y al final de la letra, cuál sigue.
 Tocando ese *Sigue:* pasás directo. La lista viaja con el respaldo y con Drive.
 
 Mientras estás en un tema del show, la barra de abajo se agranda para usarla
-sin mirar: sin la velocidad, con ⏮ ⏭ y un botón grande de pausa. ☰ abre directo
+sin mirar: sin el deslizador de velocidad, con ⏮ ⏭ y un botón grande de pausa.
+Los temas sin karaoke tienen además **🐢 / 🐇** para la velocidad.
+
+La velocidad del autoscroll es **de cada tema**: la ajustás en el ensayo (🐢 /
+🐇, el deslizador o ↑ ↓) y queda guardada con el tema. Con *Pantalla siempre
+encendida*, la tablet no se bloquea mientras el Atril esté a la vista, aunque
+esté en pausa entre tema y tema. ☰ abre directo
 la lista del show, con el tema actual a la vista. En pantalla completa la barra
 de abajo sigue estando, con **✕ Salir** para volver.
+
+Usándolo desde el navegador, el **⛶** de arriba de la lista de temas pone
+pantalla completa sin pestañas ni barra de direcciones, pero deja la barra de
+la app. Instalado como app, ya abre sin pestañas.
 
 ## Controles
 
@@ -159,7 +169,7 @@ de abajo sigue estando, con **✕ Salir** para volver.
 | Doble toque | Pantalla completa |
 | Pellizcar | Tamaño de letra |
 | Espacio | Pausa / sigue (y marca, al sincronizar) |
-| ↑ ↓ | Velocidad del autoscroll |
+| ↑ ↓ | Velocidad del autoscroll (de ese tema) |
 | ← → | ±5 segundos |
 | + − | Tamaño de letra |
 | F | Pantalla completa |
@@ -208,8 +218,12 @@ PIN). Sin el PIN no se pueden leer.
 
 ## Publicarlo
 
-Cualquier hosting estático sirve. Con GitHub Pages: *Settings* → *Pages* →
-*Deploy from a branch* → `main` / `root`.
+Está en GitHub Pages, publicado por el workflow `.github/workflows/pages.yml`
+(*Settings* → *Pages* → *Source*: **GitHub Actions**): cada push a `main` queda
+en línea en un par de minutos. Cualquier otro hosting estático sirve igual.
+
+En ⚙ → *Versión* se ve cuál tiene el dispositivo. Si se publica una nueva con
+la app abierta, aparece arriba *Hay una versión nueva del Atril → Actualizar*.
 
 El contenido que cargues (letras, audios, tiempos) queda en tu dispositivo:
 no se sube al repositorio ni a ningún servidor.

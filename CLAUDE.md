@@ -30,7 +30,7 @@ workflow `.github/workflows/pages.yml`. Push a `main` = publicado en ~2 minutos.
 | Dónde | Qué |
 |---|---|
 | `index.html` | La app entera |
-| `atril-sw.js` | Service worker: red primero, caché de respaldo. **Subir `CACHE` cuando cambie `index.html`** |
+| `atril-sw.js` | Service worker: red primero, caché de respaldo. **Subir `CACHE` cuando cambie `index.html`**, siempre con la forma `'atril-vN'`: la app lee ese número para mostrar la versión y avisar si hay una nueva |
 | `atril.webmanifest` + `atril-*.png` | PWA, para instalarla en la tablet |
 | `tools/alinear.py` | Audio + letra → `.lrc`, con Whisper. Opcional, corre local |
 | `tools/servir.js` | Servidor estático de Node puro, sin dependencias |
@@ -38,6 +38,8 @@ workflow `.github/workflows/pages.yml`. Push a `main` = publicado en ~2 minutos.
 ### Dónde vive cada cosa
 
 - **Temas** (letras, tiempos, metadatos): `localStorage`, clave `atril.data.v2`.
+- **Velocidad del autoscroll**: por tema, `song.speed` (si no tiene, `prefs.speed`).
+  Leerla siempre con `velocidad()` y cambiarla con `setVelocidad()`.
 - **Lista del show**: `data.show = {ids, updatedAt}`, dentro de `atril.data.v2`.
   Viaja entera en el respaldo y en Drive y gana la más nueva: no se mezcla tema
   por tema. Puede tener ids de temas borrados; `showList()` los filtra.
@@ -93,8 +95,15 @@ fuera de `lineEls`: es la actual mientras `active === -1` (`elDe(-1)`), y al
 tocar muestra cuántos segundos faltan para entrar.
 
 **Modo show** (`body.show`): el tema actual está en la lista del show. La barra
-de abajo se agranda, pierde la velocidad y suma una pausa grande (`#btnPlay2`).
-En pantalla completa (`body.zen`) se va sólo la barra de arriba.
+de abajo se agranda, pierde el deslizador de velocidad y suma una pausa grande
+(`#btnPlay2`); los temas de autoscroll tienen 🐢 / 🐇 (`#velShow`).
+
+**Pantalla encendida** (`prefs.wake`): el wake lock se pide mientras la app está
+a la vista (`wakeSegun()`), no sólo mientras corre un tema: entre tema y tema
+la tablet no se tiene que bloquear en el show.
+En pantalla completa (`body.zen`) se va sólo la barra de arriba. El ⛶ de la
+lista (`#btnFull`) pone sólo la pantalla completa del navegador; `zenFull`
+recuerda si la pidió el zen, para que salir del zen no devuelva las pestañas.
 
 ### Sincronización con Drive
 
