@@ -53,7 +53,7 @@
   header .title small{display:block;font-weight:400;font-size:13px;color:var(--dim)}
   body.zen header{display:none}
 
-  #stage{flex:1 1 auto; overflow-y:auto; overflow-x:hidden; position:relative; scrollbar-width:none}
+  #stage{flex:1 1 auto; overflow-y:auto; overflow-x:hidden; position:relative; scrollbar-width:none; background:var(--bg)}
   #stage::-webkit-scrollbar{display:none}
   #lyrics{
     padding:40vh 5vw; font-size:var(--fs); line-height:1.35; font-weight:700;
@@ -97,7 +97,9 @@
     background:#000; display:none; box-shadow:0 6px 24px rgba(0,0,0,.4);
   }
   body.hasyt #ytbox{display:block}
-  body.hasyt.ytmin #ytbox{width:0; height:0; border:none}
+  /* "ocultar" lo manda detrás de la letra, que lo tapa: mismo tamaño, opacidad y lugar que visible.
+     Achicado a 0×0, en la tablet YouTube no reproducía. */
+  body.hasyt.ytmin #ytbox{z-index:-1; pointer-events:none}
   #ytbox iframe{display:block; width:100%; height:112px; border:0}
   #ytHide{
     position:absolute; top:2px; right:2px; z-index:2; background:rgba(0,0,0,.65);
