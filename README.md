@@ -3,8 +3,8 @@
 Las letras de tus temas en una tablet, para leerlas mientras tocás.
 
 - **Modo atril**: la letra baja sola, a la velocidad que le pongas.
-- **Modo karaoke**: si el tema tiene tiempos, resalta la línea actual y deja
-  entera a la vista la que viene.
+- **Modo karaoke**: si el tema tiene tiempos, resalta la línea actual en el
+  centro de la pantalla, con la que pasó arriba y la que viene entera abajo.
 - **Lista del show**: el orden de los temas para tocar, y se pasa de uno a otro
   con un botón o un pedal Bluetooth.
 - Tamaño de letra a botón, a slider o pellizcando con dos dedos. Nunca tan
@@ -152,7 +152,7 @@ La velocidad del autoscroll es **de cada tema**: la ajustás en el ensayo (🐢 
 encendida*, la tablet no se bloquea mientras el Atril esté a la vista, aunque
 esté en pausa entre tema y tema. ☰ abre directo
 la lista del show, con el tema actual a la vista. En pantalla completa la barra
-de abajo sigue estando, con **✕ Salir** para volver.
+de abajo sigue estando, todavía más grande, con una **✕ roja** para volver.
 
 Usándolo desde el navegador, el **⛶** de arriba de la lista de temas pone
 pantalla completa sin pestañas ni barra de direcciones, pero deja la barra de

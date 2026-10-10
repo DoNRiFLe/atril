@@ -56,7 +56,7 @@
   #stage{flex:1 1 auto; overflow-y:auto; overflow-x:hidden; position:relative; scrollbar-width:none; background:var(--bg)}
   #stage::-webkit-scrollbar{display:none}
   #lyrics{
-    padding:40vh 5vw; font-size:var(--fs); line-height:1.35; font-weight:700;
+    padding:40vh 5vw 60vh; font-size:var(--fs); line-height:1.35; font-weight:700;  /* abajo, lugar para centrar las últimas */
     letter-spacing:.2px; text-wrap:balance;
   }
   .ln{
@@ -122,7 +122,13 @@
   body.show footer, body.zen footer{padding:10px 12px; gap:10px}
   body.show footer .btn, body.zen footer .btn{font-size:24px; padding:16px 20px; border-radius:14px}
   body.show footer .clock, body.zen footer .clock{font-size:20px}
-  body.show #ytbox, body.zen #ytbox{bottom:100px}
+  /* pantalla completa: la barra de abajo bien grande, y la ✕ roja para salir */
+  body.zen footer .btn{font-size:32px; padding:20px 14px; border-radius:16px}
+  body.zen #btnPlay2{font-size:40px}
+  body.zen footer .clock{font-size:24px}
+  body.zen #btnZen{color:var(--danger)}
+  body.show #ytbox{bottom:100px}
+  body.zen #ytbox{bottom:130px}
 
   .sheet{
     position:fixed; inset:0; background:var(--bg); z-index:50;
@@ -622,9 +628,12 @@ function highlight(i){
 // -1 es la intro, cuando se ve (karaoke o sincronizando)
 function elDe(i){ return i===-1 ? (document.body.classList.contains('conlinea') ? introEl : null) : lineEls[i]; }
 // la actual arriba, para que debajo entre entera la que viene
+// lo que se está cantando, al centro: arriba se ve lo que pasó y abajo lo que viene. Arriba de todo
+// (como antes, al 10%), si el karaoke pasaba a la estrofa siguiente un poco antes, la última se perdía.
+const CENTRO=0.45;
 function centrar(suave){
   const el=elDe(active); if(!el) return;
-  stage.scrollTo({top:el.offsetTop - stage.clientHeight*0.10, behavior:suave?'smooth':'auto'});
+  stage.scrollTo({top:el.offsetTop + el.offsetHeight/2 - stage.clientHeight*CENTRO, behavior:suave?'smooth':'auto'});
 }
 // en la intro, cuánto falta para la 1ª línea: para saber cuándo entrar
 function textoIntro(){
@@ -649,7 +658,7 @@ function atenuar(){
 /* ============ tamaño de letra: siempre entran la línea actual y la que viene ============ */
 let fsEf=44;
 function ajustarFs(){
-  const css=document.documentElement.style, alto=stage.clientHeight*0.85;
+  const css=document.documentElement.style, alto=stage.clientHeight*(0.97-CENTRO);  // la mitad de abajo
   const entra=fs=>{ css.setProperty('--fs', fs+'px'); return !(alto>0) || parMasAlto()<=alto; };
   let fs=prefs.fs;
   if(!entra(fs)){
@@ -662,12 +671,14 @@ function ajustarFs(){
   $('#fsVal').textContent = fs<prefs.fs ? (fs+'px · tope para ver 2 líneas') : (fs+'px');
 }
 // lo más alto que ocupan juntas una línea y la siguiente, con los renglones vacíos del medio
+// con la actual al centro, lo que tiene que entrar abajo: desde el medio de una línea hasta el final de
+// la siguiente (con los renglones vacíos del medio). Devuelve el peor caso de todo el tema.
 function parMasAlto(){
   let peor=0;
   for(let i=0;i<lineEls.length;i++){
     if(!cur.lines[i].trim()) continue;
     const a=lineEls[i], b=lineEls[sigLinea(i)]||a;
-    peor=Math.max(peor, b.offsetTop+b.offsetHeight-a.offsetTop);
+    peor=Math.max(peor, b.offsetTop+b.offsetHeight-(a.offsetTop+a.offsetHeight/2));
   }
   return peor;
 }
@@ -792,10 +803,9 @@ function tick(ts){
   // sincronizando, las líneas las marca el toque: ni los tiempos viejos ni el autoscroll las mueven
   if(document.body.classList.contains('syncing')) return;
   if(isKaraoke()){
-    let i=-1; const T=cur.timings, lead=prefs.lead;
-    for(let k=0;k<T.length;k++){ if(T[k]!=null && T[k]-lead<=clock) i=k; else if(T[k]!=null) break; }
-    highlight(i); textoIntro();
-    if(!hasAudio() && i>=T.length-1 && clock>T[T.length-1]+8) setPlaying(false);
+    highlight(lineaActual()); textoIntro();
+    // sin audio, el cronómetro para solo un rato después de la última línea
+    if(!hasAudio() && clock > Math.max(...cur.timings.filter(x=>x!=null))+8) setPlaying(false);
   } else if(!hasAudio()){
     scrollAcc += (velocidad()/2) * dt;
     const px=Math.floor(scrollAcc);
@@ -811,11 +821,15 @@ function seek(t){
   if(esYt()){ try{ yt.seekTo(clock, true); if(!playing) yt.pauseVideo(); }catch(e){} }
   else if(audioURL) player.currentTime=clock;
   updateClock();
-  if(isKaraoke() && !document.body.classList.contains('syncing')){
-    let i=-1;
-    for(let k=0;k<cur.timings.length;k++) if(cur.timings[k]!=null && cur.timings[k]-prefs.lead<=clock) i=k;
-    highlight(i); textoIntro();
-  }
+  if(isKaraoke() && !document.body.classList.contains('syncing')){ highlight(lineaActual()); textoIntro(); }
+}
+// La línea que va según el reloj. Un renglón vacío nunca es la actual: al guardar la sincronización queda
+// con el tiempo de la última de la estrofa, y como viene después, ganaba él: esa última se apagaba apenas
+// empezaba y la vista se iba a la estrofa siguiente. En la pausa entre estrofas sigue la última cantada.
+function lineaActual(){
+  const T=cur.timings, lead=prefs.lead; let i=-1;
+  for(let k=0;k<T.length;k++) if(T[k]!=null && T[k]-lead<=clock && cur.lines[k].trim()) i=k;
+  return i;
 }
 function resetAll(){
   clock=0; seek(0);
@@ -1819,7 +1833,8 @@ $('#ytHide').onclick=e=>{ e.stopPropagation(); document.body.classList.add('ytmi
 let zenFull=false;
 function setZen(on){
   document.body.classList.toggle('zen', on);
-  $('#btnZen').textContent = on ? '✕ Salir' : '⛶';
+  $('#btnZen').textContent = on ? '✕' : '⛶';
+  $('#btnZen').title = on ? 'Salir de pantalla completa' : 'Pantalla completa';
   try{
     if(on && !document.fullscreenElement && document.documentElement.requestFullscreen){
       zenFull=true; document.documentElement.requestFullscreen().catch(()=>{ zenFull=false; });

@@ -83,9 +83,12 @@ todo lo que compara letra (la búsqueda) tiene que pasar por `sinMarcas()`.
 ### Dos líneas siempre a la vista
 
 Pedido del usuario: aunque la banda se pierda, tiene que ver la línea actual y
-la que viene. Por eso la actual se ubica al 10% de la pantalla (`centrar()`) y
-`ajustarFs()` topea la letra para que la actual y la siguiente entren juntas en
-el 85% del alto (el máximo pedido es 200 px).
+la que viene, y también la que pasó. Por eso la actual va **al centro**
+(`CENTRO`, 45% del alto, en `centrar()`) y `ajustarFs()` topea la letra para
+que, desde el medio de la actual hasta el final de la siguiente, entre en la
+mitad de abajo (el máximo pedido es 200 px). Arriba de todo (al 10%) se probó
+y no sirvió: si el karaoke pasaba a la estrofa siguiente, la última se perdía.
+La tablet va en vertical.
 El tamaño que se ve (`fsEf`) puede ser menor que el pedido (`prefs.fs`); A+, A−
 y el pellizco parten de `fsEf`. Se recalcula al cambiar de tema y con un
 `ResizeObserver` sobre `#stage` (girar la tablet, pantalla completa).
@@ -137,6 +140,11 @@ puesto nunca se sube ni se exporta en claro** salvo con *Exportar sin cifrar*.
   guarda con cada toque (`localStorage`, `atril.sync.v1`) y se puede seguir
   desde una línea (`seguirDesde()`) o desde donde quedó un guardado a medias
   (`corteGuardado()`).
+- **Que un renglón vacío fuera la línea actual.** Al guardar la sincronización,
+  el renglón que separa estrofas queda con el tiempo de la última línea (hace
+  falta para que el `.lrc` no pierda la separación). Como viene después, ganaba
+  él: la última línea de cada estrofa se apagaba apenas empezaba y la vista se
+  iba a la estrofa siguiente. `lineaActual()` nunca elige un renglón vacío.
 - **El VAD de Whisper calibrado para voz hablada** descartaba temas enteros con
   la banda sonando. Va con `threshold` bajo y reintento sin filtro.
 - **Dar por hecho que el usuario tiene algo instalado.** Los scripts de Windows
